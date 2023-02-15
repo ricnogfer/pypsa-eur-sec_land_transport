@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# This Python module models a exogenous-driven land transport scenario (as graphically described in https://github.com/ricnogfer/pypsa-eur-sec_land_transport/blob/master/resources/exogenous_endogenous_land_transport.pdf)
+# This Python module models an exogenous-driven land transport scenario involving ICE/BE-based vehicles (graphically represented in https://github.com/ricnogfer/pypsa-eur-sec_land_transport/blob/master/resources/docs/exogenous_endogenous_land_transport.pdf)
 
 
 # import PyPSA package
