@@ -345,15 +345,13 @@ costs:
   USD2013_to_EUR2013: 0.7532
 
   # Marginal and capital costs can be overwritten
-  # capital_cost:
-  #   onwind: 500
+  capital_cost:
+    oil: 90
+    solar: 100
+    
   marginal_cost:
+    oil: 0.1  
     solar: 0.01
-    onwind: 0.015
-    offwind: 0.015
-    hydro: 0.
-    H2: 0.
-    battery: 0.
 
   emission_prices: # only used with the option Ep (emission prices)
     co2: 0.
