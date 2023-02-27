@@ -7,11 +7,10 @@ Dependencies
 ------------
 The (Python) code stored in the present folder is known to work correctly with the following dependencies:
 
-- Lorem Ipsum
+- Python 3.10.8
 
-- Lorem Ipsum
+- PyPSA 0.21.3
 
-- Lorem Ipsum
-
+- Pandas 1.5.3
 
 
