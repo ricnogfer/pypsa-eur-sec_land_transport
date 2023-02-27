@@ -1,0 +1,27 @@
+#
+# Snakemake file for the exogenous-driven land transport (toy) model
+#
+
+
+configfile: "config.yaml"
+
+
+RESOURCE_PATH = "../resources/technology_data"
+RESULT_PATH = "results"
+
+
+wildcard_constraints:
+    clusters = "[0-9]+m?"
+
+
+rule all:
+    input:
+        technology_costs_file = RESOURCE_PATH + "/costs_2025.csv",
+        solar_profile_file = RESOURCE_PATH + "/solar_profile_1979_2017.csv",
+        transport_demand_file = expand(RESOURCE_PATH + "/transport_demand_s_{clusters}.csv", **config["scenario"])
+    output:
+        result_txt_file = RESULT_PATH + "/results.txt",
+        result_png_file = RESULT_PATH + "/results.png"
+    script:
+        "model.py"
+
