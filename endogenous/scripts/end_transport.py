@@ -9,6 +9,8 @@ Created on Tue Feb 14 16:01:01 2023
 import pypsa 
 import pandas as pd
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
 
 #makes it possible to add more busses to Links
 override_component_attrs = pypsa.descriptors.Dict(
@@ -77,10 +79,11 @@ def transport(string):
     df_oil = df_tech.loc['oil']
     oil = df_oil.set_index(['parameter'])
     #discount rate 0.07
-    oil_capital_cost = annuity(oil.at['lifetime','value'], 0.07)*oil.at['investment','value']*1000*(1+oil.at['FOM','value']/100) # in €/MW
+    oil_capital_cost = annuity(oil.at['lifetime','value'], 0.07)*oil.at['investment','value']*1000*+oil.at['FOM','value']/100 # in €/MW
     oil_marginal_cost = oil.at['VOM','value']
+    oil_co2 = oil.at['CO2 intensity','value']
     
-    network.add("Carrier", "oil", co2_emissions=1.)
+    network.add("Carrier", "oil", co2_emissions=oil_co2)
     
     network.add("Bus", 
                 "oil bus", 
@@ -91,7 +94,7 @@ def transport(string):
                 bus="oil bus",
                 p_nom=100,
                 marginal_cost = oil_marginal_cost, #million EUR/MWh
-                capital_cost = oil_capital_cost,
+                capital_cost = 0,
                 p_nom_extendable=True)
                 #committable=True,
                 #p_min_pu=0,
@@ -111,7 +114,7 @@ def transport(string):
     CF_solar = df_solar['ESP'][[hour.strftime("%Y-%m-%dT%H:%M:%SZ") for hour in network.snapshots]]
     solar = df_tech.loc['solar']
     solar = df_tech.loc['solar'].set_index(['parameter'])
-    capital_cost_solar = annuity(solar.at['lifetime','value'], 0.07)*solar.at['investment','value']*1000*(1+solar.at['FOM','value']/100) # in €/MW
+    capital_cost_solar = annuity(solar.at['lifetime','value'], 0.07)*solar.at['investment','value']*1000*+solar.at['FOM','value']/100 # in €/MW
     # capital_cost_solar = annuity(25, 0.07)*425000*(1+0.03) # in €/MW
     network.add("Generator",
                 "solar",
@@ -177,6 +180,7 @@ def transport(string):
                  solver_name='gurobi')
     
     network.generators_t.p.plot()
+    #plt.show()
 
 if __name__ == "__main__":
     string = ''
