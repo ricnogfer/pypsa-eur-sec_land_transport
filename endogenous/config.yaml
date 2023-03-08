@@ -1,0 +1,6 @@
+scenario:
+  simpl: # only relevant for PyPSA-Eur
+    - ''
+  clusters: # number of nodes in Europe, any integer between 37 (1 node per country-zone) and several hundred
+    - 45
+    
