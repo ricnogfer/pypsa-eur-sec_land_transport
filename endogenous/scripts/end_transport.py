@@ -140,7 +140,7 @@ def transport(string):
         bus0="oil bus",  
         bus1="vehicle bus",                               
         carrier = "vehicle",
-        efficiency = 1.,        
+        efficiency = 0.25,        
         p_nom_extendable=True,
         #p_nom_max= ,
         #lifetime = ,
@@ -153,7 +153,7 @@ def transport(string):
         bus0="electricity bus",                               
         bus1 = "vehicle bus",
         carrier = "vehicle",
-        efficiency = 1.,        
+        efficiency = 0.85,        
         p_nom_extendable=True,
         #p_nom_max= ,
         #lifetime = ,
@@ -179,8 +179,17 @@ def transport(string):
                  pyomo=False,
                  solver_name='gurobi')
     
+    # print objective value
+    print("Objective value: %f" % network.objective)
+
+    # print oil generator value
+    print("Oil generator value: %f" % network.generators.p_nom_opt["oil"])
+
+    # print solar generator value
+    print("Solar generator value: %f" % network.generators.p_nom_opt["solar"])
+
     network.generators_t.p.plot()
-    #plt.show()
+    plt.show()
 
 if __name__ == "__main__":
     string = ''
