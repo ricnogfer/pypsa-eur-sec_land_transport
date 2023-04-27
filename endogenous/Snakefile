@@ -1,0 +1,11 @@
+configfile: "config.yaml"
+
+wildcard_constraints:
+    simpl="[a-zA-Z0-9]*",
+    clusters="[0-9]+m?"
+    
+rule transport:
+    input:
+        transport_demand=expand("resources/transport_demand_s{simpl}_{clusters}.csv",**config['scenario'])
+    script: "scripts/end_transport.py"
+
