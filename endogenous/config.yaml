@@ -3,4 +3,26 @@ scenario:
     - ''
   clusters: # number of nodes in Europe, any integer between 37 (1 node per country-zone) and several hundred
     - 45
+  planning_horizons: # investment years for myopic and perfect; for overnight, year of cost assumptions can be different and is defined under 'costs'
+    - 2020
+    - 2025
+    - 2030
+    - 2035
+    - 2040
+    - 2045 
+    - 2050
+# CO2 budget as a fraction of 1990 emissions
+# this is over-ridden if CO2Lx is set in sector_opts
+# this is also over-ridden if cb is set in sector_opts
+co2_budget:
+  2020: 0.7011648746
+  2025: 0.5241935484
+  2030: 0.2970430108
+  2035: 0.1500896057
+  2040: 0.0712365591
+  2045: 0.0322580645
+  2050: 0
+  
+bev_charge_efficiency: 0.9  #BEV (dis-)charging efficiency
+transport_internal_combustion_efficiency: 0.3    
     

@@ -3,9 +3,17 @@ configfile: "config.yaml"
 wildcard_constraints:
     simpl="[a-zA-Z0-9]*",
     clusters="[0-9]+m?"
+
+rule all:
+    input:
+        expand("results/generators_profile_{planning_horizons}.png", **config['scenario'])
+	
     
 rule transport:
     input:
-        transport_demand=expand("resources/transport_demand_s{simpl}_{clusters}.csv",**config['scenario'])
+        transport_demand=expand("resources/transport_demand_s{simpl}_{clusters}.csv", **config['scenario']),
+        co2_totals_name='resources/co2_totals.csv',
+    output:
+    	results = "results/generators_profile_{planning_horizons}.png"
     script: "scripts/end_transport.py"
 
