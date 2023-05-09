@@ -36,7 +36,7 @@ def create_model(parameters):
     # add carrier "carrier_oil" to network
     network.add("Carrier",
                 "carrier_oil",
-                co2_emissions = 1)   # TODO: replace with CO2 emission values from CSV file
+                co2_emissions = 1.0)   # TODO: replace with CO2 emission values from CSV file
 
 
     # add bus "bus_oil" to network
@@ -132,7 +132,7 @@ def create_model(parameters):
     network.add("GlobalConstraint",
                 "global_constraint_co2",
                 sense = "<=",
-                constant = 10**8)   # high value so that solver can find a solution (this is just to illustrate the usage of CO2 global constraint - no practical usefulness for this (toy) model though)
+                constant = 10**8)   # high value so that solver can find a solution (this is just to illustrate the usage of the CO2 global constraint - no practical use for this (toy) model though)
 
 
     return network
@@ -211,6 +211,29 @@ def get_model_parameters(snakemake_parameters):
         Contains the parameters that the model (i.e. PyPSA network) will be based upon.
     """
 
+
+
+    def calculate_annuity(period, discount_rate):
+        """
+        Parameters
+        ----------
+        period : a Python integer (int)
+            Contains the fixed length of time to receive payments from an investment.
+        discount_rate : a Python float (float)
+            Contains the assumed rate of return that is used to determine the present value of future payments.
+
+        Returns
+        -------
+        None.
+        """
+
+        if discount_rate > 0:
+            return discount_rate / (1.0 - 1.0 / (1.0 + discount_rate) ** period)
+
+        return 1 / period
+
+
+
     parameters = dict()
 
 
@@ -220,13 +243,15 @@ def get_model_parameters(snakemake_parameters):
 
     # get oil generator costs
     oil = technology_costs.loc["oil"].set_index("parameter")
-    parameters["oil_capital_cost"] = 0   # set to 0 since oil is imported to Europe
+    parameters["oil_capital_cost"] = 0   # set to 0 since oil is imported to Europe (i.e. no relevant capital cost associated with oil generators)
     parameters["oil_marginal_cost"] = oil.at["VOM", "value"]
 
 
     # get solar generator costs
     solar = technology_costs.loc["solar"].set_index("parameter")
-    parameters["solar_capital_cost"] = ((solar.at["investment", "value"] * 1000.0) / solar.at["lifetime", "value"]) * (1 + solar.at["FOM", "value"] / 100.0)   # TODO: check if the formula is correct
+    solar_investment = solar.at["investment", "value"] * 1000.0   # in EUR/MW
+    solar_annuity = calculate_annuity(solar.at["lifetime", "value"], 0.05) + solar.at["FOM", "value"] / 100.0   # in percentage
+    parameters["solar_capital_cost"] = solar_investment * solar_annuity
     parameters["solar_marginal_cost"] = solar.at["VOM", "value"]
 
 
