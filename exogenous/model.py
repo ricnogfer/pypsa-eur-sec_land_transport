@@ -6,7 +6,7 @@
 
 
 
-# import necessary packages
+# import necessary modules
 import os
 import sys
 import pypsa
@@ -89,7 +89,7 @@ def create_model(parameters):
 
 
         # add load "load_BEV" to bus "bus_BEV" with associated demand
-        value = parameters["transport_demand"] * parameters["BEV_shares"][0]   # TODO: check if value is correct
+        value = parameters["transport_demand"] * parameters["BEV_shares"][0]
         network.add("Load",
                     "load_BEV",
                     bus = "bus_BEV",
@@ -257,7 +257,7 @@ def get_model_parameters(snakemake_parameters):
 
 
     # read solar profile from CSV file and get profile for "DNK" (chosen arbitrarly)
-    solar_profile = pandas.read_csv(snakemake_parameters["solar_profile_file"], sep = ";", index_col = 0)
+    solar_profile = pandas.read_csv(snakemake_parameters["solar_profile_file"], index_col = 0, sep = ";")
     solar_profile.index = pandas.to_datetime(solar_profile.index)
     parameters["solar_profile"] = solar_profile["DNK"]
 
@@ -268,15 +268,13 @@ def get_model_parameters(snakemake_parameters):
 
 
     # read transport demand (CSV) file and get demand for "DK1 0" (chosen arbitrarly)
-    transport_demand = pandas.read_csv(snakemake_parameters["transport_demand_file"], index_col = 0)
-    transport_demand.index = pandas.to_datetime(transport_demand.index, utc = True)
+    transport_demand = pandas.read_csv(snakemake_parameters["transport_demand_file"], index_col = 0, parse_dates = True)
     parameters["transport_demand"] = transport_demand["DK1 0"]
 
 
     # read DSM profile from CSV file and get profile for "DK1 0" (chosen arbitrarly)
     dsm_profile = pandas.read_csv(snakemake_parameters["DSM_profile_file"], index_col = 0, parse_dates = True)
     parameters["DSM_profile"] = dsm_profile["DK1 0"]
-    print(parameters["DSM_profile"])
 
 
     # get snapshots information
