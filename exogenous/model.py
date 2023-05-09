@@ -69,13 +69,14 @@ def create_model(parameters):
                 "bus_electricity")
 
 
-    # add generator "generator_solar" to bus "bus_electricity" with associated costs
+    # add generator "generator_solar" to bus "bus_electricity" with associated solar profile and costs
+    solar_profile = parameters["solar_profile"][[snapshot.strftime("%Y-%m-%dT%H:%M:%SZ") for snapshot in network.snapshots]]   # select solar profile period based on the snapshots period
     network.add("Generator",
                 "generator_solar",
                 bus = "bus_electricity",
-                p_nom_extendable = True,
+                p_nom_extendable = True,   # set p_nom to extendable and comment next two lines of code given that demand exceeds generation in certain snapshots, which will render the model unfeasible (this is just to illustrate the usage of solar profile - no practical use for this (toy) model though)
                 #p_nom = 1,
-                #p_max_pu = parameters["solar_profile"],   # TODO: fix solar profile
+                #p_max_pu = solar_profile,
                 capital_cost = parameters["solar_capital_cost"],
                 marginal_cost = parameters["solar_marginal_cost"])
 
@@ -256,7 +257,7 @@ def get_model_parameters(snakemake_parameters):
 
 
     # read solar profile from CSV file and get profile for "DNK" (chosen arbitrarly)
-    solar_profile = pandas.read_csv(snakemake_parameters["solar_profile_file"], sep = ';', index_col = 0)
+    solar_profile = pandas.read_csv(snakemake_parameters["solar_profile_file"], sep = ";", index_col = 0)
     solar_profile.index = pandas.to_datetime(solar_profile.index)
     parameters["solar_profile"] = solar_profile["DNK"]
 
