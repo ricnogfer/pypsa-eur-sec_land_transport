@@ -14,6 +14,12 @@ import pandas
 
 
 
+# declare global variables
+_COUNTRY = "DNK"   # country to be analised (chosen arbitrarly)
+_NODE = "DK1 0"   # node within country to be analised (chosen arbitrarly)
+
+
+
 # function to create model (i.e. PyPSA network)
 def create_model(parameters):
     """
@@ -57,7 +63,7 @@ def create_model(parameters):
     if parameters["ICE_shares"][0] > 0:
 
         # add load "load_ICE" to bus "bus_oil" with associated demand
-        value = parameters["ICE_shares"][0] / parameters["ICE_efficiency"] * parameters["transport_demand"]
+        value = parameters["transport_demand"] * parameters["ICE_shares"][0] / parameters["ICE_efficiency"]
         network.add("Load",
                     "load_ICE",
                     bus = "bus_oil",
@@ -74,8 +80,7 @@ def create_model(parameters):
     network.add("Generator",
                 "generator_solar",
                 bus = "bus_electricity",
-                p_nom_extendable = True,   # set p_nom to extendable and comment next two lines of code given that demand exceeds generation in certain snapshots, which will render the model unfeasible (this is just to illustrate the usage of solar profile - no practical use for this (toy) model though)
-                #p_nom = 1,
+                p_nom_extendable = True,   # set p_nom to extendable and comment next line of code given that demand exceeds generation in certain snapshots, which will render the model unfeasible (this is just to illustrate the usage of solar profile - no practical use for this (toy) model though)
                 #p_max_pu = solar_profile,
                 capital_cost = parameters["solar_capital_cost"],
                 marginal_cost = parameters["solar_marginal_cost"])
@@ -96,17 +101,18 @@ def create_model(parameters):
                     p_set = value)
 
 
+        # add link "link_bus_electricity_2_bus_BEV" which connects bus "bus_electricity" to bus "bus_BEV" with associated efficiency
+        value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]
         network.add("Link",
                     "link_bus_electricity_2_bus_BEV",
                     bus0 = "bus_electricity",
                     bus1 = "bus_BEV",
-                    p_nom_extendable = True,
-                    #p_nom = value,   # TODO: replace with correct value
+                    p_nom = value,
                     #p_max_pu = avail_profile[nodes],   # TODO: enable availability profile
                     efficiency = parameters["BEV_charge_efficiency"])
 
 
-        if parameters["BEV_V2G"]:
+        if False and parameters["BEV_V2G"]:
             value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]   # TODO: check if value is correct
             network.add("Link",
                         "link_bus_BEV_2_bus_electricity",
@@ -124,9 +130,11 @@ def create_model(parameters):
                         "store_battery",
                         bus = "bus_BEV",
                         e_cyclic = True,
-                        e_nom = value,
-                        e_max_pu = 1,
-                        e_min_pu = parameters["DSM_profile"])
+                        #e_nom = value,
+                        e_nom_extendable = True
+                        #e_max_pu = 1,
+                        #e_min_pu = parameters["DSM_profile"]
+                        )
 
 
     # add global constraint "global_constraint_co2" for CO2 emissions
@@ -256,25 +264,26 @@ def get_model_parameters(snakemake_parameters):
     parameters["solar_marginal_cost"] = solar.at["VOM", "value"]
 
 
-    # read solar profile from CSV file and get profile for "DNK" (chosen arbitrarly)
+    # read solar profile from CSV file and get profile for chosen country
     solar_profile = pandas.read_csv(snakemake_parameters["solar_profile_file"], index_col = 0, sep = ";")
     solar_profile.index = pandas.to_datetime(solar_profile.index)
-    parameters["solar_profile"] = solar_profile["DNK"]
+    parameters["solar_profile"] = solar_profile[_COUNTRY]
 
 
-    # read transport data (CSV) file and get data for "DK1 0" (chosen arbitrarly)
+    # read transport data (CSV) file and get data for chosen node
     transport_data = pandas.read_csv(snakemake_parameters["transport_data"], index_col = "name")
-    parameters["transport_data"] = transport_data.loc["DK1 0"]
+    parameters["transport_data"] = transport_data.loc[_NODE]
 
 
-    # read transport demand (CSV) file and get demand for "DK1 0" (chosen arbitrarly)
-    transport_demand = pandas.read_csv(snakemake_parameters["transport_demand_file"], index_col = 0, parse_dates = True)
-    parameters["transport_demand"] = transport_demand["DK1 0"]
+    # read transport demand (CSV) file and get demand for chosen node
+    transport_demand = pandas.read_csv(snakemake_parameters["transport_demand_file"], index_col = 0)
+    transport_demand.index = pandas.to_datetime(transport_demand.index, utc = True)
+    parameters["transport_demand"] = transport_demand[_NODE]
 
 
-    # read DSM profile from CSV file and get profile for "DK1 0" (chosen arbitrarly)
+    # read DSM profile from CSV file and get profile for chosen node
     dsm_profile = pandas.read_csv(snakemake_parameters["DSM_profile_file"], index_col = 0, parse_dates = True)
-    parameters["DSM_profile"] = dsm_profile["DK1 0"]
+    parameters["DSM_profile"] = dsm_profile[_NODE]
 
 
     # get snapshots information
@@ -354,7 +363,7 @@ if __name__ == "__main__":
 
 
     # plot store results (if environment allows it - e.g. JupyterLab, Spyder IDE)
-    network.stores_t.p.plot()
+    #network.stores_t.p.plot()
 
 
     # save generator plot to file (in png format)
