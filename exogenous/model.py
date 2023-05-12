@@ -6,6 +6,12 @@
 
 
 
+# TODO:
+# 1) generate results for multiple years (as specified in the "sector:land_transport_electric_share" and "sector:land_transport_ice_share" options in the config.yaml file)
+# 2) use CO2 emission values from CSV file (instead of being hard-coded to 1.0 as it is currently)
+
+
+
 # import necessary modules
 import os
 import sys
@@ -42,12 +48,13 @@ def create_model(parameters):
     # add carrier "carrier_oil" to network
     network.add("Carrier",
                 "carrier_oil",
-                co2_emissions = 1.0)   # TODO: replace with CO2 emission values from CSV file
+                co2_emissions = 1.0)
 
 
     # add bus "bus_oil" to network
     network.add("Bus",
-                "bus_oil")
+                "bus_oil",
+                carrier = "carrier_oil")
 
 
     # add generator "generator_oil" to bus "bus_oil" with associated costs
@@ -80,8 +87,8 @@ def create_model(parameters):
     network.add("Generator",
                 "generator_solar",
                 bus = "bus_electricity",
-                p_nom_extendable = True,   # set p_nom to extendable and comment next line of code given that demand exceeds generation in certain snapshots, which will render the model unfeasible (this is just to illustrate the usage of solar profile - no practical use for this (toy) model though)
-                #p_max_pu = solar_profile,
+                p_nom_extendable = True,
+                #p_max_pu = solar_profile,   # fix solar profile
                 capital_cost = parameters["solar_capital_cost"],
                 marginal_cost = parameters["solar_marginal_cost"])
 
@@ -101,45 +108,45 @@ def create_model(parameters):
                     p_set = value)
 
 
-        # add link "link_bus_electricity_2_bus_BEV" which connects bus "bus_electricity" to bus "bus_BEV" with associated efficiency
+        # add link "link_bus_electricity_2_bus_BEV" which connects bus "bus_electricity" to bus "bus_BEV" with associated availability and efficiency
         value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]
         network.add("Link",
                     "link_bus_electricity_2_bus_BEV",
                     bus0 = "bus_electricity",
                     bus1 = "bus_BEV",
                     p_nom = value,
-                    #p_max_pu = avail_profile[nodes],   # TODO: enable availability profile
+                    p_max_pu = parameters["availability_profile"].values,
                     efficiency = parameters["BEV_charge_efficiency"])
 
 
-        if False and parameters["BEV_V2G"]:
-            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]   # TODO: check if value is correct
+        # enable BE-vehicle batteries to send power to the grid  (i.e. bus "bus_electricity")
+        if parameters["BEV_V2G"]:
+            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]
             network.add("Link",
                         "link_bus_BEV_2_bus_electricity",
                         bus0 = "bus_BEV",
                         bus1 = "bus_electricity",
                         p_nom = value,
-                        #p_max_pu = avail_profile[nodes],   # TODO: enable availability profile
+                        p_max_pu = parameters["availability_profile"].values,
                         efficiency = parameters["BEV_charge_efficiency"])
 
 
-        # turn on BE-vehicle batteries based on demand-side management (DSM) profile
-        if False and parameters["BEV_DSM"]:
+        # enable BE-vehicle batteries based on demand-side management (DSM) profile
+        if parameters["BEV_DSM"]:
             value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_availability"] * parameters["BEV_energy"]
             network.add("Store",
                         "store_battery",
                         bus = "bus_BEV",
                         e_cyclic = True,
-                        #e_nom = value,
-                        e_nom_extendable = True
-                        #e_max_pu = 1,
-                        #e_min_pu = parameters["DSM_profile"]
-                        )
+                        e_nom = value,
+                        e_max_pu = 1,
+                        e_min_pu = parameters["DSM_profile"].values)
 
 
     # add global constraint "global_constraint_co2" for CO2 emissions
     network.add("GlobalConstraint",
                 "global_constraint_co2",
+                carrier_attribute = "co2_emissions",
                 sense = "<=",
                 constant = 10**8)   # high value so that solver can find a solution (this is just to illustrate the usage of the CO2 global constraint - no practical use for this (toy) model though)
 
@@ -163,8 +170,10 @@ def get_snakemake_parameters():
     if "snakemake" in globals():   # through Snakemake
         parameters["technology_costs_file"] = snakemake.input["technology_costs_file"]
         parameters["solar_profile_file"] = snakemake.input["solar_profile_file"]
-        parameters["transport_data"] = snakemake.input["transport_data"][0]
+        parameters["transport_data_file"] = snakemake.input["transport_data_file"][0]
         parameters["transport_demand_file"] = snakemake.input["transport_demand_file"][0]
+        parameters["availability_profile_file"] = snakemake.input["availability_profile_file"][0]
+        parameters["DSM_profile_file"] = snakemake.input["dsm_profile_file"][0]
         parameters["ICE_shares"] = tuple(snakemake.config["sector"]["land_transport_ice_share"].values())
         parameters["BEV_shares"] = tuple(snakemake.config["sector"]["land_transport_electric_share"].values())
         parameters["ICE_efficiency"] = snakemake.config["sector"]["transport_internal_combustion_efficiency"]
@@ -174,7 +183,6 @@ def get_snakemake_parameters():
         parameters["BEV_charge_rate"] = snakemake.config["sector"]["bev_charge_rate"]
         parameters["BEV_charge_efficiency"] = snakemake.config["sector"]["bev_charge_efficiency"]
         parameters["BEV_V2G"] = snakemake.config["sector"]["v2g"]
-        parameters["DSM_profile_file"] = snakemake.input["dsm_profile_file"][0]
         parameters["result_txt_file"] = snakemake.output["result_txt_file"]
         parameters["result_png_file"] = snakemake.output["result_png_file"]
         parameters["snapshots"] = pandas.date_range("%sT00:00Z" % snakemake.config["snapshots"]["start"], "%sT23:00Z" % snakemake.config["snapshots"]["end"], freq = "H")
@@ -185,8 +193,10 @@ def get_snakemake_parameters():
             os.makedirs(result_path)
         parameters["technology_costs_file"] = "%s/costs_2025.csv" % resource_path
         parameters["solar_profile_file"] = "%s/solar_profile_1979_2017.csv" % resource_path
-        parameters["transport_data"] = "%s/transport_data_s_37.csv" % resource_path
+        parameters["transport_data_file"] = "%s/transport_data_s_37.csv" % resource_path
         parameters["transport_demand_file"] = "%s/transport_demand_s_37.csv" % resource_path
+        parameters["availability_profile_file"] = "%s/avail_profile_s_37.csv" % resource_path
+        parameters["DSM_profile_file"] = "%s/dsm_profile_s_37.csv" % resource_path
         parameters["ICE_shares"] = (0.9, 0.75, 0.4, 0.0)
         parameters["BEV_shares"] = (0.1, 0.25, 0.6, 1.0)
         parameters["ICE_efficiency"] = 0.3
@@ -196,7 +206,6 @@ def get_snakemake_parameters():
         parameters["BEV_charge_efficiency"] = 0.9
         parameters["BEV_charge_rate"] = 0.011
         parameters["BEV_V2G"] = True
-        parameters["DSM_profile_file"] = "%s/dsm_profile_s_37.csv" % resource_path
         parameters["result_txt_file"] = "%s/%s" % (result_path, "results.txt")
         parameters["result_png_file"] = "%s/%s" % (result_path, "results.png")
         parameters["snapshots"] = pandas.date_range("2013-01-01T00:00Z", "2013-12-31T23:00Z", freq = "H")
@@ -264,14 +273,14 @@ def get_model_parameters(snakemake_parameters):
     parameters["solar_marginal_cost"] = solar.at["VOM", "value"]
 
 
-    # read solar profile from CSV file and get profile for chosen country
+    # read solar profile CSV file and get profile for chosen country
     solar_profile = pandas.read_csv(snakemake_parameters["solar_profile_file"], index_col = 0, sep = ";")
     solar_profile.index = pandas.to_datetime(solar_profile.index)
     parameters["solar_profile"] = solar_profile[_COUNTRY]
 
 
     # read transport data (CSV) file and get data for chosen node
-    transport_data = pandas.read_csv(snakemake_parameters["transport_data"], index_col = "name")
+    transport_data = pandas.read_csv(snakemake_parameters["transport_data_file"], index_col = "name")
     parameters["transport_data"] = transport_data.loc[_NODE]
 
 
@@ -281,7 +290,12 @@ def get_model_parameters(snakemake_parameters):
     parameters["transport_demand"] = transport_demand[_NODE]
 
 
-    # read DSM profile from CSV file and get profile for chosen node
+    # read availability CSV file and get availability for chosen node
+    availability_profile = pandas.read_csv(snakemake_parameters["availability_profile_file"], index_col = 0, parse_dates = True)
+    parameters["availability_profile"] = availability_profile[_NODE]
+
+
+    # read DSM profile CSV file and get profile for chosen node
     dsm_profile = pandas.read_csv(snakemake_parameters["DSM_profile_file"], index_col = 0, parse_dates = True)
     parameters["DSM_profile"] = dsm_profile[_NODE]
 
@@ -358,7 +372,7 @@ if __name__ == "__main__":
             sys.exit(-1)   # exit unsuccessfully
 
 
-    # plot generator results (if environment allows it - e.g. JupyterLab, Spyder IDE)
+    # get generator plot
     plot = network.generators_t.p.plot()
 
 
