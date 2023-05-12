@@ -18,8 +18,9 @@ rule all:
     input:
         technology_costs_file = RESOURCE_PATH + "/costs_2025.csv",
         solar_profile_file = RESOURCE_PATH + "/solar_profile_1979_2017.csv",
-        transport_data = expand(RESOURCE_PATH + "/transport_data_s_{clusters}.csv", **config["scenario"]),
+        transport_data_file = expand(RESOURCE_PATH + "/transport_data_s_{clusters}.csv", **config["scenario"]),
         transport_demand_file = expand(RESOURCE_PATH + "/transport_demand_s_{clusters}.csv", **config["scenario"]),
+        availability_profile_file = expand(RESOURCE_PATH + "/avail_profile_s_{clusters}.csv", **config["scenario"]),
         dsm_profile_file = expand(RESOURCE_PATH + "/dsm_profile_s_{clusters}.csv", **config["scenario"])
     output:
         result_txt_file = RESULT_PATH + "/results.txt",
