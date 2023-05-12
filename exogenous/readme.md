@@ -13,4 +13,6 @@ The (Python) code stored in the present folder is known to work correctly with t
 
 - Pandas 1.5.3
 
+- Gurobi 9.5.2
+
 
