@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import sys
+import logging
 
 #makes it possible to add more busses to Links
 override_component_attrs = pypsa.descriptors.Dict(
@@ -70,33 +71,29 @@ def annuity(n,r):
     else:
         return 1/n
 
-def transport(string):
+def transport(string, costs):
     network = pypsa.Network(override_component_attrs=override_component_attrs)
     
     hours_in_2013 = pd.date_range('2013-01-01T00:00Z','2013-12-31T23:00Z', freq='H')
     network.set_snapshots(hours_in_2013)
     
-    df_tech = pd.read_csv(string + 'resources/costs_' + str(Nyear) + '.csv', sep=',', index_col=0)
-    df_oil = df_tech.loc['oil']
-    oil = df_oil.set_index(['parameter'])
+
     #discount rate 0.07
-    oil_capital_cost = oil.at['investment','value']*1000*(annuity(oil.at['lifetime','value'], 0.07)+oil.at['FOM','value']/100) # in €/MW
-    oil_marginal_cost = oil.at['VOM','value']
-    oil_co2 = oil.at['CO2 intensity','value']
+    oil_co2 = costs.at['oil', 'CO2 intensity']
     
-    network.add("Carrier", "co2_oil", co2_emissions=oil_co2)
+    network.add("Carrier", "oil", co2_emissions=oil_co2)
     
     network.add("Bus", 
                 "oil bus", 
-                carrier="co2_oil")
+                carrier="oil")
     
     network.add("Generator",
                 'oil',
                 bus="oil bus",
-                p_nom=100,
-                marginal_cost = oil_marginal_cost, #million EUR/MWh
-                capital_cost = 0,
-                carrier = "co2_oil",
+                #p_nom=100,
+                marginal_cost = costs.at['oil', 'fuel'], # EUR/MWh
+                capital_cost = 0.,
+                carrier = "oil",
                 p_nom_extendable=True)
                 #committable=True,
                 #p_min_pu=0,
@@ -114,57 +111,57 @@ def transport(string):
     df_solar = pd.read_csv(string + 'resources/pv_optimal.csv', sep=';', index_col=0)
     df_solar.index = pd.to_datetime(df_solar.index)
     CF_solar = df_solar[country][[hour.strftime("%Y-%m-%dT%H:%M:%SZ") for hour in network.snapshots]]
-    solar = df_tech.loc['solar']
-    solar = df_tech.loc['solar'].set_index(['parameter'])
-    capital_cost_solar = solar.at['investment','value']*1000*(annuity(solar.at['lifetime','value'], 0.07)+solar.at['FOM','value']/100) # in €/MW
-    # capital_cost_solar = annuity(25, 0.07)*425000*(1+0.03) # in €/MW
+    
+    
+    
     network.add("Generator",
                 "solar",
                 bus="electricity bus",
                 p_nom_extendable=True,
                 carrier="solar",
                 #p_nom_max=1000, #maximum capacity can be limited due to environmental constraints
-                capital_cost = capital_cost_solar,
-                marginal_cost = solar.at['VOM','value'],
+                capital_cost = 1000*costs.at['solar', 'investment']*(annuity(costs.at['solar', 'lifetime'], 0.07)+costs.at['solar', 'FOM']/100),
+                marginal_cost = costs.at['solar', 'VOM'],
                 p_max_pu = CF_solar)
     
-    network.add("Bus", "battery bus")
+    network.add("Bus", "EV battery bus")
 
-    df_costs = pd.read_csv(string + 'resources/costs_' + str(Nyear) + '.csv', sep=',', index_col=0)
-    #set first column as second index and keep original index
-    df_costs.set_index(df_costs.columns[0],append=True,inplace=True)
-    #set parameter/value names as column name, min_count=1 fills not existing values with NaN
-    costs = df_costs.loc[:,"value"].unstack(level=1).groupby("technology").sum(min_count=1)
-    network.add("Store", "battery storage",
-                bus="battery bus",
-                e_nom_extendable=True,
-                e_cyclic = True,
-                capital_cost=costs.at['battery storage', 'investment'],
-                lifetime = costs.at['battery storage', 'lifetime'])
-    network.add("Carrier",'battery')
+    if options["bev_dsm"]:
+        network.add("Store", "battery storage",
+                    bus="EV battery bus",
+                    e_nom_extendable=True,
+                    e_cyclic = True,
+                    capital_cost=costs.at['battery storage', 'investment'],
+                    lifetime = costs.at['battery storage', 'lifetime'])
+    
+    network.add("Carrier",'EV battery')
+    bev_charge_efficiency = options['bev_charge_efficiency']
     network.add("Link",
                 "battery charger",
                 bus0 = "electricity bus",
-                bus1 = 'battery bus',
+                bus1 = 'EV battery bus',
                 carrier = 'battery charger',
                 p_nom_extendable = 'True',
-                efficiency = costs.at['battery inverter', 'efficiency']**0.5,
+                efficiency = bev_charge_efficiency, #costs.at['battery inverter', 'efficiency']**0.5,
                 capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                 lifetime = costs.at['battery inverter', 'lifetime'])
-    network.add("Link",
-                "battery discharger",
-                bus0 = "battery bus",
-                bus1 = 'electricity bus',
-                carrier = 'battery discharger',
-                p_nom_extendable = 'True',
-                efficiency = costs.at['battery inverter', 'efficiency']**0.5,
-                capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
-                lifetime = costs.at['battery inverter', 'lifetime'])
-    network.add("Carrier", "vehicle")
+    
+    if options["v2g"]:
+        network.add("Link",
+                    "battery discharger",
+                    bus0 = "EV battery bus",
+                    bus1 = 'electricity bus',
+                    carrier = 'battery discharger',
+                    p_nom_extendable = 'True',
+                    efficiency = costs.at['battery inverter', 'efficiency']**0.5,
+                    capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
+                    lifetime = costs.at['battery inverter', 'lifetime'])
+    
+    network.add("Carrier", "land transport demand")
     
     network.add("Bus", 
-                "vehicle bus",
-                carrier="vehicle")
+                "land transport bus",
+                carrier="land transport demand")
     
     network.add("Carrier", "co2", co2_emissions=1.)
 
@@ -177,8 +174,7 @@ def transport(string):
 
     co2_limit = co2_totals.loc[country_short, 'road non-elec']
     co2_limit = co2_limit * limit
-    #co2_limit = co2_limit * Nyear
-    target = 0#3.392052e+03/8760
+
     
     network.add("Store",
                 "co2 atmosphere",
@@ -188,47 +184,42 @@ def transport(string):
                 bus="co2 atmosphere", 
                 carrier="co2")
 
-    ice_efficiency = snakemake.config['transport_internal_combustion_efficiency']
-    bev_charge_efficiency = snakemake.config['bev_charge_efficiency']
+    ice_efficiency = options['transport_internal_combustion_efficiency']
+    
     network.add(
         "Link",
         "ICE Vehicle",
         bus0="oil bus",  
-        bus1="vehicle bus",
+        bus1="land transport bus",
         bus2 = "co2 atmosphere",                               
-        carrier = "vehicle",
+        carrier = "land transport demand",
         efficiency = ice_efficiency,  
         efficiency2 = oil_co2*ice_efficiency,
         p_nom_extendable=True,
-        #p_nom_max= ,
-        #lifetime = ,
-        #capital_cost =  
     )
     
     network.add(
         "Link",
         "EV",
-        bus0="electricity bus",                               
-        bus1 = "vehicle bus",
-        carrier = "vehicle",
-        efficiency = bev_charge_efficiency,        
+        bus0="EV battery bus",                               
+        bus1 = "land transport bus",
+        carrier = "land transport demand",
+        efficiency = 1.,#bev_charge_efficiency,        
         p_nom_extendable=True,
-        #p_nom_max= ,
-        #lifetime = ,
-        #capital_cost =  
     )
-    #pop_layout = pd.read_csv('../resources/pop_layout_elec_s_45.csv', index_col=0)
+
     #df_load  = pd.read_csv(snakemake.input.transport_demand, index_col=0, parse_dates=True)
     df_load = pd.read_csv(string + 'resources/transport_demand_s_45.csv', sep=',', index_col=0) 
     df_load.index = pd.to_datetime(df_load.index, utc=True)
     df_load.index.name = 'utc_time'
     load_p = df_load['DK1 0']
     # data for load: resources/transport_demand_s{simpl}_{clusters}.csv 
-
+    #print(network.loads_t.p_set)
+    print(network.carriers)
     network.add("Load",
                 "load2",
-                bus = "vehicle bus",
-                carrier = "vehicle",
+                bus = "land transport bus",
+                carrier = "land transport demand",
                 p_set = load_p)
         
     
@@ -239,15 +230,66 @@ def transport(string):
         carrier_attribute = "co2_emissions",
         constant = co2_limit,
     )
+    return network
+
+
+def add_v2g_constraint():
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery discharger'})
+    lhs2 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})
+    lhs = lhs1-lhs2
+    rhs = 0
+    network.model.add_constraints(lhs==rhs, name="constraint_v2g")
+
+def add_EV_storage_constraint():
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})/options['EV_charge_rate']
+    lhs2 = network.model.variables['Store-e_nom'].sel({'Store-ext':'battery storage'})/options['bev_energy']
+    lhs = lhs1-lhs2
+    rhs = 0
+    network.model.add_constraints(lhs==rhs, name="constraint_EV_storage")
+
+def add_EV_number_constraint():
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})/options['EV_charge_rate']
+    lhs2 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV'})/options['EV_consumption_1car']
+    lhs = lhs1-lhs2
+    rhs = 0
+    network.model.add_constraints(lhs==rhs, name="constraint_EV_number")
+
+def extra_functionality(network, snapshots):
     
-    #print(network.loads_t.p_set)
-    print(network.carriers)
+    #m = network.optimize.create_model() #for debugging
+    print(network.model.variables['Link-p_nom'])
+    print(network.model.variables['Link-p_nom']['battery charger'])
+    network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})
+    #network.model.variables['Link-p_nom'].sel('battery_charger') #use dictionary for network.model.variables().sel(key:value)
+    if options["bev_dsm"]:
+        add_EV_storage_constraint()
+    add_EV_number_constraint()
+    if options["v2g"]:
+        add_v2g_constraint()
     
-    status, status2 = network.lopf(network.snapshots, 
-                 pyomo=False,
-                 solver_name='gurobi')
     
+def solve_network(network):
+
+    status, condition = network.optimize(
+            solver_name='gurobi',
+            extra_functionality=extra_functionality)
+    # status, status2 = network.lopf(network.snapshots, 
+    #              pyomo=False,
+    #              solver_name='gurobi')
+    logger = logging.getLogger(__name__)
+    pypsa.pf.logger.setLevel(logging.WARNING)
+
+    if status != "ok":
+        logger.warning(
+            f"Solving status '{status}' with termination condition '{condition}'"
+        )
+    if "infeasible" in condition:
+        raise RuntimeError("Solving status 'infeasible'")
+        
     if(status == 'ok'):
+        print(network)
+        print(network.links)
+        print(network.generators_t.p.sum())
         # print objective value
         print("Objective value: %f" % network.objective)
     
@@ -262,19 +304,50 @@ def transport(string):
         plt.savefig(snakemake.output.results, dpi=1200, bbox_inches='tight')
         #plt.show()
 
-        print('year: ', Nyear)
-        print('co2 limit: ', co2_limit)
+        #print('year: ', Nyear)
+        #print('co2 limit: ', co2_limit)
+
+        network.export_to_netcdf(snakemake.output.network)
+
         return network
     else:
         print('model infeasable')
         return 1
-    
+
+def prepare_costs(cost_file, config, nyears):
+    # set all asset costs and other parameters
+    costs = pd.read_csv(cost_file, index_col=[0, 1]).sort_index()
+
+    # correct units to MW and EUR
+    costs.loc[costs.unit.str.contains("/kW"), "value"] *= 1e3
+
+    # min_count=1 is important to generate NaNs which are then filled by fillna
+    costs = (
+        costs.loc[:, "value"].unstack(level=1).groupby("technology").sum(min_count=1)
+    )
+
+    costs = costs.fillna(config["fill_values"])
+
+    def annuity_factor(v):
+        return annuity(v["lifetime"], v["discount rate"]) + v["FOM"] / 100
+
+    costs["fixed"] = [
+        annuity_factor(v) * v["investment"] * nyears for i, v in costs.iterrows()
+    ]
+
+    return costs
+    #get costs for technology
+    df_costs = pd.read_csv(string + 'resources/costs_' + str(Nyear) + '.csv', sep=',', index_col=0)
+    #set first column as second index and keep original index
+    df_costs.set_index(df_costs.columns[0],append=True,inplace=True)
+    #set parameter/value names as column name, min_count=1 fills not existing values with NaN
+    costs = df_costs.loc[:,"value"].unstack(level=1).groupby("technology").sum(min_count=1)    
 
 if __name__ == "__main__":
     string = '' 
     if 'snakemake' not in globals():
         print('run with snakemake')
-        #sys.exit(1)
+        sys.exit(1)
         string = '../'
         
         class snakemake:
@@ -292,9 +365,17 @@ if __name__ == "__main__":
     print(Nyears)
     #for x in range(len(Nyears)):
     Nyear = snakemake.wildcards.planning_horizons #Nyears[x]
-    print(Nyear)
+
     Nyear = int(Nyear)
     limit = snakemake.config['co2_budget'].get(Nyear)
-    
-    network = transport(string)
+    cost_file = string + 'resources/costs_' + str(Nyear) + '.csv'
+    nyears = 1
+    costs = prepare_costs(
+        cost_file,
+        snakemake.config["costs"],
+        nyears,
+    )
+    options = snakemake.config["sector"]
+    network = transport(string, costs)
+    solve_network(network)
 
