@@ -45,23 +45,23 @@ def create_model(parameters):
     network.set_snapshots(parameters["snapshots"])
 
 
-    # add carrier "carrier_oil" to network
+    # add carrier "oil" to network
     network.add("Carrier",
-                "carrier_oil",
+                "oil",
                 co2_emissions = 1.0)
 
 
-    # add bus "bus_oil" to network
+    # add bus "oil" to network
     network.add("Bus",
-                "bus_oil",
-                carrier = "carrier_oil")
+                "oil",
+                carrier = "oil")
 
 
-    # add generator "generator_oil" to bus "bus_oil" with associated costs
+    # add generator "oil" to bus "oil" with associated costs
     network.add("Generator",
-                "generator_oil",
-                bus = "bus_oil",
-                carrier = "carrier_oil",
+                "oil",
+                bus = "oil",
+                carrier = "oil",
                 p_nom_extendable = True,
                 capital_cost = parameters["oil_capital_cost"],
                 marginal_cost = parameters["oil_marginal_cost"])
@@ -69,24 +69,24 @@ def create_model(parameters):
 
     if parameters["ICE_shares"][0] > 0:
 
-        # add load "load_ICE" to bus "bus_oil" with associated demand
+        # add load "ICE" to bus "oil" with associated demand
         value = parameters["transport_demand"] * parameters["ICE_shares"][0] / parameters["ICE_efficiency"]
         network.add("Load",
-                    "load_ICE",
-                    bus = "bus_oil",
+                    "ICE",
+                    bus = "oil",
                     p_set = value)
 
 
-    # add bus "bus_electricity" to network
+    # add bus "electricity" to network
     network.add("Bus",
-                "bus_electricity")
+                "electricity")
 
 
-    # add generator "generator_solar" to bus "bus_electricity" with associated solar profile and costs
+    # add generator "solar" to bus "electricity" with associated solar profile and costs
     solar_profile = parameters["solar_profile"][[snapshot.strftime("%Y-%m-%dT%H:%M:%SZ") for snapshot in network.snapshots]]   # select solar profile period based on the snapshots period
     network.add("Generator",
-                "generator_solar",
-                bus = "bus_electricity",
+                "solar",
+                bus = "electricity",
                 p_nom_extendable = True,
                 #p_max_pu = solar_profile,   # fix solar profile
                 capital_cost = parameters["solar_capital_cost"],
@@ -95,37 +95,37 @@ def create_model(parameters):
 
     if parameters["BEV_shares"][0] > 0:
 
-        # add bus "bus_BEV" to network
+        # add bus "BEV" to network
         network.add("Bus",
-                    "bus_BEV")
+                    "BEV")
 
 
-        # add load "load_BEV" to bus "bus_BEV" with associated demand
+        # add load "BEV" to bus "BEV" with associated demand
         value = parameters["transport_demand"] * parameters["BEV_shares"][0]
         network.add("Load",
-                    "load_BEV",
-                    bus = "bus_BEV",
+                    "BEV",
+                    bus = "BEV",
                     p_set = value)
 
 
-        # add link "link_bus_electricity_2_bus_BEV" which connects bus "bus_electricity" to bus "bus_BEV" with associated availability and efficiency
+        # add link "electricity_2_BEV" which connects bus "electricity" to bus "BEV" with associated availability and efficiency
         value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]
         network.add("Link",
-                    "link_bus_electricity_2_bus_BEV",
-                    bus0 = "bus_electricity",
-                    bus1 = "bus_BEV",
+                    "electricity_2_BEV",
+                    bus0 = "electricity",
+                    bus1 = "BEV",
                     p_nom = value,
                     p_max_pu = parameters["availability_profile"].values,
                     efficiency = parameters["BEV_charge_efficiency"])
 
 
-        # enable BE-vehicle batteries to send power to the grid  (i.e. bus "bus_electricity")
+        # enable BE-vehicle batteries to send power to the grid  (i.e. bus "electricity")
         if parameters["BEV_V2G"]:
             value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]
             network.add("Link",
-                        "link_bus_BEV_2_bus_electricity",
-                        bus0 = "bus_BEV",
-                        bus1 = "bus_electricity",
+                        "BEV_2_electricity",
+                        bus0 = "BEV",
+                        bus1 = "electricity",
                         p_nom = value,
                         p_max_pu = parameters["availability_profile"].values,
                         efficiency = parameters["BEV_charge_efficiency"])
@@ -135,8 +135,8 @@ def create_model(parameters):
         if parameters["BEV_DSM"]:
             value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_availability"] * parameters["BEV_energy"]
             network.add("Store",
-                        "store_battery",
-                        bus = "bus_BEV",
+                        "battery",
+                        bus = "BEV",
                         e_cyclic = True,
                         e_nom = value,
                         e_max_pu = 1,
@@ -358,17 +358,17 @@ if __name__ == "__main__":
 
     # print results
     print("Objective value=%.2f M€" % (network.objective / 10**6))
-    print("Optimal nominal power oil generator=%.2f MW" % network.generators.p_nom_opt["generator_oil"])
-    print("Optimal nominal power solar generator=%.2f MW" % network.generators.p_nom_opt["generator_solar"])
+    print("Optimal nominal power oil generator=%.2f MW" % network.generators.p_nom_opt["oil"])
+    print("Optimal nominal power solar generator=%.2f MW" % network.generators.p_nom_opt["solar"])
 
 
     # write results to file
     with open(snakemake_parameters["result_txt_file"], "w") as handle:
         try:
             handle.write("Objective value=%.2f M€\n" % (network.objective / 10**6))
-            handle.write("Optimal nominal power oil generator=%.2f MW\n" % network.generators.p_nom_opt["generator_oil"])
-            handle.write("Optimal nominal power solar generator=%.2f MW\n" % network.generators.p_nom_opt["generator_solar"])
-        except Exception as e:
+            handle.write("Optimal nominal power oil generator=%.2f MW\n" % network.generators.p_nom_opt["oil"])
+            handle.write("Optimal nominal power solar generator=%.2f MW\n" % network.generators.p_nom_opt["solar"])
+        except:
             sys.exit(-1)   # exit unsuccessfully
 
 
