@@ -73,7 +73,7 @@ def annuity(n,r):
 
 def calculate_EV_timeseries(n,alpha):
     cars_driving = 0.5 # Assume a certain share of the fleet that can be driving at the same time
-    L_t = n.loads_t.p_set['land_transport'] # load time series
+    L_t = n.loads_t.p_set['land transport'] # load time series
     L_norm_t = L_t/max(L_t) # normalize time series
     EV_c = alpha*(1-L_norm_t) # we can charge all alpha [%] of parked cars  
     EV_d = cars_driving*L_norm_t # 70 % of EV fleet is available for driving 
@@ -89,6 +89,29 @@ def transport(string, costs):
     hours_in_2013 = pd.date_range('2013-01-01T00:00Z','2013-12-31T23:00Z', freq='H')
     network.set_snapshots(hours_in_2013)
     
+    # Add loads
+
+    network.add("Carrier", "land transport demand")
+    
+    network.add("Bus", 
+            "land transport bus",
+            carrier="land transport demand")
+
+    #df_load  = pd.read_csv(snakemake.input.transport_demand, index_col=0, parse_dates=True)
+    df_load = pd.read_csv(string + 'resources/transport_demand_s_45.csv', sep=',', index_col=0) 
+    df_load.index = pd.to_datetime(df_load.index, utc=True)
+    df_load.index.name = 'utc_time'
+    load_p = df_load['DK1 0']
+    # data for load: resources/transport_demand_s{simpl}_{clusters}.csv 
+    #print(network.loads_t.p_set)
+    print(network.carriers)
+    
+    network.add("Load",
+                "land transport",
+                bus = "land transport bus",
+                carrier = "land transport demand",
+                p_set = load_p)
+
     # Add oil bus and generator
     #discount rate 0.07
     oil_co2 = costs.at['oil', 'CO2 intensity']
@@ -176,12 +199,7 @@ def transport(string, costs):
                     efficiency = costs.at['battery inverter', 'efficiency']**0.5,
                     capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                     lifetime = costs.at['battery inverter', 'lifetime'])
-    
-    network.add("Carrier", "land transport demand")
-    
-    network.add("Bus", 
-                "land transport bus",
-                carrier="land transport demand")
+
     
     network.add("Carrier", "co2", co2_emissions=1.)
 
@@ -265,22 +283,6 @@ def transport(string, costs):
         capital_cost = snakemake.config['costs']['capital_cost']['H2_vehicle'],#bev_charge_efficiency,        
         p_nom_extendable=True,
     )
-
-    # Add loads
-
-    #df_load  = pd.read_csv(snakemake.input.transport_demand, index_col=0, parse_dates=True)
-    df_load = pd.read_csv(string + 'resources/transport_demand_s_45.csv', sep=',', index_col=0) 
-    df_load.index = pd.to_datetime(df_load.index, utc=True)
-    df_load.index.name = 'utc_time'
-    load_p = df_load['DK1 0']
-    # data for load: resources/transport_demand_s{simpl}_{clusters}.csv 
-    #print(network.loads_t.p_set)
-    print(network.carriers)
-    network.add("Load",
-                "load2",
-                bus = "land transport bus",
-                carrier = "land transport demand",
-                p_set = load_p)
         
     
     network.add(
