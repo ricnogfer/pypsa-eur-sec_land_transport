@@ -21,7 +21,7 @@ def plot_EV_timeseries(n):
 
      ICE_discharging_p1 = -n.links_t.p1['EV'] # from land transport bus point-of-view
      EV_discharging_p1 = -n.links_t.p1['EV'] # from EV battery point-of-view
-     load_t = n.loads_t.p_set['land_transport']
+     load_t = n.loads_t.p_set['land transport']
 
      t_df = pd.DataFrame(index=n.snapshots)
      t_df['ICE'] = ICE_discharging_p1
