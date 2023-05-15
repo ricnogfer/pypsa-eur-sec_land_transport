@@ -71,6 +71,14 @@ def annuity(n,r):
     else:
         return 1/n
 
+def calculate_EV_timeseries(n,alpha):
+    cars_driving = 0.5 # Assume a certain share of the fleet that can be driving at the same time
+    L_t = n.loads_t.p_set['land_transport'] # load time series
+    L_norm_t = L_t/max(L_t) # normalize time series
+    EV_c = alpha*(1-L_norm_t) # we can charge all alpha [%] of parked cars  
+    EV_d = cars_driving*L_norm_t # 70 % of EV fleet is available for driving 
+    return EV_c, EV_d
+
 def transport(string, costs):
     network = pypsa.Network(override_component_attrs=override_component_attrs)
     
@@ -99,8 +107,6 @@ def transport(string, costs):
                 #p_min_pu=0,
                 #p_max_pu=1) 
     
-    
-    
     network.add("Carrier", "electricity")
     
     network.add("Bus", 
@@ -112,6 +118,25 @@ def transport(string, costs):
     df_solar.index = pd.to_datetime(df_solar.index)
     CF_solar = df_solar[country][[hour.strftime("%Y-%m-%dT%H:%M:%SZ") for hour in network.snapshots]]
     
+    network.add("Carrier", "land transport demand")
+    
+    network.add("Bus", 
+                "land transport bus",
+                carrier="land transport demand")
+
+    #df_load  = pd.read_csv(snakemake.input.transport_demand, index_col=0, parse_dates=True)
+    df_load = pd.read_csv(string + 'resources/transport_demand_s_45.csv', sep=',', index_col=0) 
+    df_load.index = pd.to_datetime(df_load.index, utc=True)
+    df_load.index.name = 'utc_time'
+    load_p = df_load['DK1 0']
+    # data for load: resources/transport_demand_s{simpl}_{clusters}.csv 
+    #print(network.loads_t.p_set)
+    print(network.carriers)
+    network.add("Load",
+                "land_transport",
+                bus = "land transport bus",
+                carrier = "land transport demand",
+                p_set = load_p)
     
     
     network.add("Generator",
@@ -127,41 +152,39 @@ def transport(string, costs):
     network.add("Bus", "EV battery bus")
 
     if options["bev_dsm"]:
-        network.add("Store", "battery storage",
+        network.add("Store", "EV battery storage",
                     bus="EV battery bus",
                     e_nom_extendable=True,
                     e_cyclic = True,
                     capital_cost=costs.at['battery storage', 'investment'],
                     lifetime = costs.at['battery storage', 'lifetime'])
     
+    EV_c,EV_d = calculate_EV_timeseries(network,alpha=0.5)
+
     network.add("Carrier",'EV battery')
     bev_charge_efficiency = options['bev_charge_efficiency']
     network.add("Link",
-                "battery charger",
+                "EV battery charger",
                 bus0 = "electricity bus",
                 bus1 = 'EV battery bus',
-                carrier = 'battery charger',
+                carrier = 'EV battery charger',
                 p_nom_extendable = 'True',
+                p_max_pu = EV_c,
                 efficiency = bev_charge_efficiency, #costs.at['battery inverter', 'efficiency']**0.5,
                 capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                 lifetime = costs.at['battery inverter', 'lifetime'])
     
     if options["v2g"]:
         network.add("Link",
-                    "battery discharger",
+                    "EV battery discharger",
                     bus0 = "EV battery bus",
                     bus1 = 'electricity bus',
-                    carrier = 'battery discharger',
+                    carrier = 'EV battery discharger',
+                    p_max_pu = EV_c,
                     p_nom_extendable = 'True',
                     efficiency = costs.at['battery inverter', 'efficiency']**0.5,
                     capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                     lifetime = costs.at['battery inverter', 'lifetime'])
-    
-    network.add("Carrier", "land transport demand")
-    
-    network.add("Bus", 
-                "land transport bus",
-                carrier="land transport demand")
     
     network.add("Carrier", "co2", co2_emissions=1.)
 
@@ -207,20 +230,6 @@ def transport(string, costs):
         efficiency = 1.,#bev_charge_efficiency,        
         p_nom_extendable=True,
     )
-
-    #df_load  = pd.read_csv(snakemake.input.transport_demand, index_col=0, parse_dates=True)
-    df_load = pd.read_csv(string + 'resources/transport_demand_s_45.csv', sep=',', index_col=0) 
-    df_load.index = pd.to_datetime(df_load.index, utc=True)
-    df_load.index.name = 'utc_time'
-    load_p = df_load['DK1 0']
-    # data for load: resources/transport_demand_s{simpl}_{clusters}.csv 
-    #print(network.loads_t.p_set)
-    print(network.carriers)
-    network.add("Load",
-                "load2",
-                bus = "land transport bus",
-                carrier = "land transport demand",
-                p_set = load_p)
         
     
     network.add(
@@ -234,21 +243,21 @@ def transport(string, costs):
 
 
 def add_v2g_constraint():
-    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery discharger'})
-    lhs2 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery discharger'})
+    lhs2 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})
     lhs = lhs1-lhs2
     rhs = 0
     network.model.add_constraints(lhs==rhs, name="constraint_v2g")
 
 def add_EV_storage_constraint():
-    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})/options['EV_charge_rate']
-    lhs2 = network.model.variables['Store-e_nom'].sel({'Store-ext':'battery storage'})/options['bev_energy']
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})/options['EV_charge_rate']
+    lhs2 = network.model.variables['Store-e_nom'].sel({'Store-ext':'EV battery storage'})/options['bev_energy']
     lhs = lhs1-lhs2
     rhs = 0
     network.model.add_constraints(lhs==rhs, name="constraint_EV_storage")
 
 def add_EV_number_constraint():
-    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})/options['EV_charge_rate']
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})/options['EV_charge_rate']
     lhs2 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV'})/options['EV_consumption_1car']
     lhs = lhs1-lhs2
     rhs = 0
@@ -258,14 +267,16 @@ def extra_functionality(network, snapshots):
     
     #m = network.optimize.create_model() #for debugging
     print(network.model.variables['Link-p_nom'])
-    print(network.model.variables['Link-p_nom']['battery charger'])
-    network.model.variables['Link-p_nom'].sel({'Link-ext':'battery charger'})
+    print(network.model.variables['Link-p_nom']['EV battery charger'])
+    network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})
     #network.model.variables['Link-p_nom'].sel('battery_charger') #use dictionary for network.model.variables().sel(key:value)
     if options["bev_dsm"]:
         add_EV_storage_constraint()
     add_EV_number_constraint()
     if options["v2g"]:
         add_v2g_constraint()
+    
+    # add_EV_timeconstraint(n)
     
     
 def solve_network(network):
