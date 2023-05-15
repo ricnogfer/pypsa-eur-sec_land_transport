@@ -121,7 +121,7 @@ def transport(string, costs):
                 p_nom_extendable=True,
                 carrier="solar",
                 #p_nom_max=1000, #maximum capacity can be limited due to environmental constraints
-                capital_cost = 1000*costs.at['solar', 'investment']*(annuity(costs.at['solar', 'lifetime'], 0.07)+costs.at['solar', 'FOM']/100),
+                capital_cost = 0, #1000*costs.at['solar', 'investment']*(annuity(costs.at['solar', 'lifetime'], 0.07)+costs.at['solar', 'FOM']/100),
                 marginal_cost = costs.at['solar', 'VOM'],
                 p_max_pu = CF_solar)
     
@@ -133,7 +133,7 @@ def transport(string, costs):
                     bus="EV battery bus",
                     e_nom_extendable=True,
                     e_cyclic = True,
-                    capital_cost=costs.at['battery storage', 'investment'],
+                    #capital_cost=costs.at['battery storage', 'investment'],
                     lifetime = costs.at['battery storage', 'lifetime'])
     
     network.add("Carrier",'EV battery')
@@ -145,7 +145,7 @@ def transport(string, costs):
                 carrier = 'battery charger',
                 p_nom_extendable = 'True',
                 efficiency = bev_charge_efficiency, #costs.at['battery inverter', 'efficiency']**0.5,
-                capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
+                #capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                 lifetime = costs.at['battery inverter', 'lifetime'])
 
     
@@ -193,27 +193,29 @@ def transport(string, costs):
 
     # Network add ICEV
     ice_efficiency = options['transport_internal_combustion_efficiency']
-    
     network.add(
         "Link",
         "ICE Vehicle",
         bus0="oil bus",  
         bus1="land transport bus",
-        bus2 = "co2 atmosphere",                               
+        bus2 = "co2 atmosphere",                           
         carrier = "land transport demand",
+        capital_cost = snakemake.config['costs']['capital_cost']['ICE_vehicle']/options['energy_to_cars'] * ice_efficiency,
         efficiency = ice_efficiency,  
         efficiency2 = oil_co2*ice_efficiency,
         p_nom_extendable=True,
     )
     
     # Add EV link
+    ev_efficiency = options['bev_bat_to_wheel_efficiency']
     network.add(
         "Link",
         "EV",
         bus0="EV battery bus",                               
         bus1 = "land transport bus",
         carrier = "land transport demand",
-        efficiency = 1.,#bev_charge_efficiency,        
+        capital_cost = snakemake.config['costs']['capital_cost']['E_vehicle']/options['energy_to_cars']*(ev_efficiency*bev_charge_efficiency),
+        efficiency = ev_efficiency,#bev_charge_efficiency,        
         p_nom_extendable=True,
     )
 
@@ -227,15 +229,16 @@ def transport(string, costs):
         'Bus',
         'H2 bus',
     )
-
+    H2_vehicle_efficiency = options['H2_car_efficiency']
     network.add("Generator",
             'H2',
             bus="H2 bus",
             #p_nom=100,
-            marginal_cost = snakemake.config['costs']['marginal_cost']['H2'], # EUR/MWh
+            marginal_cost = snakemake.config['costs']['marginal_cost']['H2']/(options['energy_to_cars'])*H2_vehicle_efficiency, # EUR/MWh
             capital_cost = 0.,
             carrier = "H2",
-            p_nom_extendable=True)
+            p_nom_extendable=True,
+            efficiency=H2_vehicle_efficiency)
             #committable=True,
             #p_min_pu=0,
             #p_max_pu=1) 
@@ -246,10 +249,12 @@ def transport(string, costs):
         bus0="H2 bus",                               
         bus1 = "land transport bus",
         carrier = "land transport demand",
-        efficiency = snakemake.config['sector']['H2_car_efficiency'],#bev_charge_efficiency,        
+        efficiency= snakemake.config['sector']['H2_car_efficiency'],
+        capital_cost = snakemake.config['costs']['capital_cost']['H2_vehicle'],#bev_charge_efficiency,        
         p_nom_extendable=True,
     )
 
+    # Add loads
     #df_load  = pd.read_csv(snakemake.input.transport_demand, index_col=0, parse_dates=True)
     df_load = pd.read_csv(string + 'resources/transport_demand_s_45.csv', sep=',', index_col=0) 
     df_load.index = pd.to_datetime(df_load.index, utc=True)
