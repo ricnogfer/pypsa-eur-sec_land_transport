@@ -189,7 +189,6 @@ def transport(string, costs):
                 e_nom = co2_limit,
                 e_min_pu = -1,
                 bus="co2 atmosphere",
-                cyclic=False, 
                 carrier="co2")
 
     # Network add ICEV
@@ -215,6 +214,39 @@ def transport(string, costs):
         bus1 = "land transport bus",
         carrier = "land transport demand",
         efficiency = 1.,#bev_charge_efficiency,        
+        p_nom_extendable=True,
+    )
+
+    # Add H2 cars 
+    network.add(
+        'Carrier',
+        'H2',
+    )
+
+    network.add(
+        'Bus',
+        'H2 bus',
+    )
+
+    network.add("Generator",
+            'H2',
+            bus="H2 bus",
+            #p_nom=100,
+            marginal_cost = snakemake.config['costs']['marginal_cost']['H2'], # EUR/MWh
+            capital_cost = 0.,
+            carrier = "H2",
+            p_nom_extendable=True)
+            #committable=True,
+            #p_min_pu=0,
+            #p_max_pu=1) 
+
+    network.add(
+        "Link",
+        "H2 Vehicle",
+        bus0="H2 bus",                               
+        bus1 = "land transport bus",
+        carrier = "land transport demand",
+        efficiency = snakemake.config['sector']['H2_car_efficiency'],#bev_charge_efficiency,        
         p_nom_extendable=True,
     )
 
