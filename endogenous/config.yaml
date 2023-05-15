@@ -4,12 +4,12 @@ scenario:
   clusters: # number of nodes in Europe, any integer between 37 (1 node per country-zone) and several hundred
     - 45
   planning_horizons: # investment years for myopic and perfect; for overnight, year of cost assumptions can be different and is defined under 'costs'
-    - 2020
-    - 2025
-    - 2030
-    - 2035
-    - 2040
-    - 2045 
+    #- 2020
+    #- 2025
+    #- 2030
+    #- 2035
+    #- 2040
+    #- 2045 
     - 2050
 # CO2 budget as a fraction of 1990 emissions
 # this is over-ridden if CO2Lx is set in sector_opts
@@ -33,6 +33,7 @@ sector:
   EV_consumption_1car: 0.01 #MWh_elec/hour (assuming 0.2 kWh/km https://github.com/PyPSA/pypsa-eur/blob/1fbe971ab8dab60d972d3a7b905b9cec7171c0ad/config/config.default.yaml#L382 and velocity of 50km/h
   ICE_consumption_1car: 0.033 #MWh_oil/hour (assuming 0.66 kWh_oil/km and 50 km/h (with the link efficiency 0.3, they are equivalent to 0.01 MWh_elec/hour)
   H2_consumption_1car: 0.02 #MWh_H2/hour (assuming KWh_H2/km and 50km/h) (with efficiency 0.5, they are equivalent to 0.01 MWh_elec/hour)
+  H2_car_efficiency: 0.5
 costs:
   year: 2030
   version: v0.5.0
@@ -54,7 +55,7 @@ costs:
     onwind: 0.015
     offwind: 0.015
     hydro: 0.
-    H2: 0.
+    H2: 90000000.
     electrolysis: 0.
     fuel cell: 0.
     battery: 0.
