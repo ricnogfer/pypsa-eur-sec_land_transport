@@ -19,7 +19,9 @@ rule plots:
         expand('results/elec_s{simpl}_{planning_horizons}.nc',**config['scenario'])
     output: 
         result = "results/generators.png",
-        vehiclenb = "results/vehiclenb.png"
+        vehiclenb = "results/vehiclenb.png",
+        EV_times1 = 'results/EV_timeseries_1.png',
+        EV_times2 = 'results/EV_timeseries_2.png',
     script: "scripts/make_plots.py" 
 
 rule transport:

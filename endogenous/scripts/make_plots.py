@@ -14,6 +14,46 @@ import matplotlib.pyplot as plt
 import sys
 import logging
 
+def plot_EV_timeseries(n):
+     # read time-dependent variables
+     EV_charging = -n.links_t.p1['EV battery charger'] # from EV battery point-of-view
+     EV_discharging = n.links_t.p0['EV'] # from EV battery point-of-view
+
+     ICE_discharging_p1 = -n.links_t.p1['EV'] # from land transport bus point-of-view
+     EV_discharging_p1 = -n.links_t.p1['EV'] # from EV battery point-of-view
+     load_t = n.loads_t.p_set['land_transport']
+
+     t_df = pd.DataFrame(index=n.snapshots)
+     t_df['ICE'] = ICE_discharging_p1
+     t_df['EV'] = EV_discharging_p1
+
+     # read capacities
+     EV_c_p_nom_opt = n.links.query('carrier == "EV battery charger"').p_nom_opt.sum()
+     EV_d_p_nom_opt = n.links.loc['EV'].p_nom_opt.sum()
+
+     EV_c_eta = n.links.query('carrier == "EV battery charger"').efficiency
+          
+     # normalize power with opt capacities
+     EV_charging_norm = EV_charging/(EV_c_p_nom_opt*EV_c_eta).item()
+     EV_discharging_norm = EV_discharging/EV_d_p_nom_opt
+
+     # make plot of balancing of EV battery bus
+     fig,ax = plt.subplots(figsize=(10,5))
+     EV_charging_norm.plot(ax=ax,label='charging')
+     EV_discharging_norm.plot(ax=ax,label='driving')
+     ax.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
+     ax.legend()
+
+     # make plot of how land transport demand is met
+     fig1,ax1 = plt.subplots(figsize=(10,5))
+     t_df.plot.area(ax=ax1,stacked=True,alpha=0.5,lw=0)
+     load_t.plot(ax=ax1,ls='--',lw=1, color='k',label='Load',zorder=10,alpha=0.5)
+     ax1.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
+     ax1.legend()
+     return fig, fig1
+
+
+
 def overrides():
     override_component_attrs = pypsa.descriptors.Dict(
         {k: v.copy() for k, v in pypsa.components.component_attrs.items()}
@@ -107,6 +147,10 @@ generators = generators.unstack(level=-1)
 plt.figure()
 generators.plot.bar(stacked=True)
 plt.savefig(snakemake.output.result, dpi=1200, bbox_inches='tight')
+
+fig,fig1 = plot_EV_timeseries(network)
+fig.savefig(snakemake.output.EV_times1, dpi=1200, bbox_inches='tight')
+fig1.savefig(snakemake.output.EV_times2, dpi=1200, bbox_inches='tight')
 
 
 nb_vehicle['index']=['EV', 'ICE']
