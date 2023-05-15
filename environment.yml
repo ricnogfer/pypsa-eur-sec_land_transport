@@ -1,0 +1,10 @@
+dependencies:
+    - python=3.10
+    - pypsa=0.22.1
+    - snakemake-minimal
+    - gurobi
+
+
+channels:
+    - bioconda
+    - conda-forge 
