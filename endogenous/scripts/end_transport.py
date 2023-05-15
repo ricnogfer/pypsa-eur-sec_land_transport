@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import sys
 import logging
 
-#makes it possible to add more busses to Links
+# Add multilink functionality to PyPSA
 override_component_attrs = pypsa.descriptors.Dict(
     {k: v.copy() for k, v in pypsa.components.component_attrs.items()}
 )
@@ -72,16 +72,20 @@ def annuity(n,r):
         return 1/n
 
 def transport(string, costs):
+    """
+    Define endogenous transport PyPSA model
+    """
+    
     network = pypsa.Network(override_component_attrs=override_component_attrs)
     
     hours_in_2013 = pd.date_range('2013-01-01T00:00Z','2013-12-31T23:00Z', freq='H')
     network.set_snapshots(hours_in_2013)
     
-
+    # Add oil bus and generator
     #discount rate 0.07
     oil_co2 = costs.at['oil', 'CO2 intensity']
     
-    network.add("Carrier", "oil", co2_emissions=oil_co2)
+    network.add("Carrier", "oil")
     
     network.add("Bus", 
                 "oil bus", 
@@ -99,8 +103,7 @@ def transport(string, costs):
                 #p_min_pu=0,
                 #p_max_pu=1) 
     
-    
-    
+    # Add electricity bus and generators 
     network.add("Carrier", "electricity")
     
     network.add("Bus", 
@@ -112,8 +115,6 @@ def transport(string, costs):
     df_solar.index = pd.to_datetime(df_solar.index)
     CF_solar = df_solar[country][[hour.strftime("%Y-%m-%dT%H:%M:%SZ") for hour in network.snapshots]]
     
-    
-    
     network.add("Generator",
                 "solar",
                 bus="electricity bus",
@@ -124,6 +125,7 @@ def transport(string, costs):
                 marginal_cost = costs.at['solar', 'VOM'],
                 p_max_pu = CF_solar)
     
+    # Add EV links
     network.add("Bus", "EV battery bus")
 
     if options["bev_dsm"]:
@@ -145,7 +147,10 @@ def transport(string, costs):
                 efficiency = bev_charge_efficiency, #costs.at['battery inverter', 'efficiency']**0.5,
                 capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                 lifetime = costs.at['battery inverter', 'lifetime'])
+
     
+    
+    # Only when v2g option is configured, add the v2g link
     if options["v2g"]:
         network.add("Link",
                     "battery discharger",
@@ -157,12 +162,15 @@ def transport(string, costs):
                     capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                     lifetime = costs.at['battery inverter', 'lifetime'])
     
+    # Add land transport bus and demand 
     network.add("Carrier", "land transport demand")
     
     network.add("Bus", 
                 "land transport bus",
                 carrier="land transport demand")
     
+
+    # Add CO2 atmosphere and carriers 
     network.add("Carrier", "co2", co2_emissions=1.)
 
     network.add("Bus", 
@@ -174,16 +182,17 @@ def transport(string, costs):
 
     co2_limit = co2_totals.loc[country_short, 'road non-elec']
     co2_limit = co2_limit * limit
-
     
     network.add("Store",
                 "co2 atmosphere",
                 e_initial= 0, 
                 e_nom = co2_limit,
                 e_min_pu = -1,
-                bus="co2 atmosphere", 
+                bus="co2 atmosphere",
+                cyclic=False, 
                 carrier="co2")
 
+    # Network add ICEV
     ice_efficiency = options['transport_internal_combustion_efficiency']
     
     network.add(
@@ -198,6 +207,7 @@ def transport(string, costs):
         p_nom_extendable=True,
     )
     
+    # Add EV link
     network.add(
         "Link",
         "EV",
