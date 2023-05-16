@@ -20,8 +20,11 @@ rule plots:
     output: 
         result = "results/generators.png",
         vehiclenb = "results/vehiclenb.png",
-        EV_times1 = 'results/EV_timeseries_1.png',
-        EV_times2 = 'results/EV_timeseries_2.png',
+        EV_balance = 'results/EV_balance.png',
+        EV_soc_1year = 'results/EV_soc_1year.png',
+        EV_soc_1day = 'results/EV_soc_1day.png',
+        transport_balance_1year = 'results/transport_balance_1year.png',
+        transport_balance_period = 'results/transport_balance_period.png',
     script: "scripts/make_plots.py" 
 
 rule transport:
