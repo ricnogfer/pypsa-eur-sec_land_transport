@@ -68,12 +68,12 @@ def create_model(parameters, index):
                 marginal_cost = parameters["oil_marginal_cost"])
 
 
-    if parameters["ICE_shares"][index] > 0:
+    if parameters["ICEV_shares"][index] > 0:
 
-        # add load "ICE" to bus "oil" with associated demand
-        value = parameters["transport_demand"] * parameters["ICE_shares"][index] / parameters["ICE_efficiency"]
+        # add load "ICEV" to bus "oil" with associated demand
+        value = parameters["transport_demand"] * parameters["ICEV_shares"][index] / parameters["ICEV_efficiency"]
         network.add("Load",
-                    "ICE",
+                    "ICEV",
                     bus = "oil",
                     p_set = value)
 
@@ -112,7 +112,7 @@ def create_model(parameters, index):
         # add link "electricity_2_BEV" which connects bus "electricity" to bus "BEV" with associated availability and efficiency
         value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_charge_rate"]
         network.add("Link",
-                    "Charger",
+                    "charge",
                     bus0 = "electricity",
                     bus1 = "BEV",
                     p_nom = value,
@@ -124,7 +124,7 @@ def create_model(parameters, index):
         if parameters["BEV_V2G"]:
             value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_charge_rate"]
             network.add("Link",
-                        "Discharger",
+                        "discharge",
                         bus0 = "BEV",
                         bus1 = "electricity",
                         p_nom = value,
@@ -176,9 +176,9 @@ def get_snakemake_parameters():
         parameters["availability_profile_file"] = snakemake.input["availability_profile_file"][0]
         parameters["DSM_profile_file"] = snakemake.input["dsm_profile_file"][0]
         parameters["planning_horizons"] = tuple(snakemake.config["scenario"]["planning_horizons"])
-        parameters["ICE_shares"] = tuple(snakemake.config["sector"]["land_transport_ice_share"].values())
+        parameters["ICEV_shares"] = tuple(snakemake.config["sector"]["land_transport_ice_share"].values())
         parameters["BEV_shares"] = tuple(snakemake.config["sector"]["land_transport_electric_share"].values())
-        parameters["ICE_efficiency"] = snakemake.config["sector"]["transport_internal_combustion_efficiency"]
+        parameters["ICEV_efficiency"] = snakemake.config["sector"]["transport_internal_combustion_efficiency"]
         parameters["BEV_DSM"] = snakemake.config["sector"]["bev_dsm"]
         parameters["BEV_availability"] = snakemake.config["sector"]["bev_availability"]
         parameters["BEV_energy"] = snakemake.config["sector"]["bev_energy"]
@@ -200,9 +200,9 @@ def get_snakemake_parameters():
         parameters["availability_profile_file"] = "%s/avail_profile_s_37.csv" % resource_path
         parameters["DSM_profile_file"] = "%s/dsm_profile_s_37.csv" % resource_path
         parameters["planning_horizons"] = (2025, )
-        parameters["ICE_shares"] = (0.9, )
+        parameters["ICEV_shares"] = (0.9, )
         parameters["BEV_shares"] = (0.1, )
-        parameters["ICE_efficiency"] = 0.3
+        parameters["ICEV_efficiency"] = 0.3
         parameters["BEV_DSM"] = True
         parameters["BEV_availability"] = 0.5
         parameters["BEV_energy"] = 0.05
@@ -310,9 +310,9 @@ def get_model_parameters(snakemake_parameters, index):
 
 
     # copy certain Snakemake parameters that are needed by the model (i.e. PyPSA network)
-    parameters["ICE_shares"] = snakemake_parameters["ICE_shares"]
+    parameters["ICEV_shares"] = snakemake_parameters["ICEV_shares"]
     parameters["BEV_shares"] = snakemake_parameters["BEV_shares"]
-    parameters["ICE_efficiency"] = snakemake_parameters["ICE_efficiency"]
+    parameters["ICEV_efficiency"] = snakemake_parameters["ICEV_efficiency"]
     parameters["BEV_DSM"] = snakemake_parameters["BEV_DSM"]
     parameters["BEV_availability"] = snakemake_parameters["BEV_availability"]
     parameters["BEV_energy"] = snakemake_parameters["BEV_energy"]
@@ -333,18 +333,18 @@ if __name__ == "__main__":
     snakemake_parameters = get_snakemake_parameters()
 
 
-    # check that Snakemake parameters "planning_horizons", "ICE_shares" and "BEV_shares" are properly specified
-    if not snakemake_parameters["planning_horizons"] or not snakemake_parameters["ICE_shares"] or not snakemake_parameters["BEV_shares"]:
-        print("The Snakemake parameters 'planning_horizons', 'ICE_shares' and/or 'BEV_shares' is/are not specified!")
+    # check that Snakemake parameters "planning_horizons", "ICEV_shares" and "BEV_shares" are properly specified
+    if not snakemake_parameters["planning_horizons"] or not snakemake_parameters["ICEV_shares"] or not snakemake_parameters["BEV_shares"]:
+        print("The Snakemake parameters 'planning_horizons', 'ICEV_shares' and/or 'BEV_shares' is/are not specified!")
         sys.exit(-1)   # exit unsuccessfully
-    if len(snakemake_parameters["planning_horizons"]) != len(snakemake_parameters["ICE_shares"]) != len(snakemake_parameters["BEV_shares"]):
-        print("The number of Snakemake parameters in 'planning_horizons', 'ICE_shares' and 'BEV_shares' do not match!")
+    if len(snakemake_parameters["planning_horizons"]) != len(snakemake_parameters["ICEV_shares"]) != len(snakemake_parameters["BEV_shares"]):
+        print("The number of Snakemake parameters in 'planning_horizons', 'ICEV_shares' and 'BEV_shares' do not match!")
         sys.exit(-1)   # exit unsuccessfully
 
 
     # check that ICE/BE-vehicle shares are properly specified
-    for i in range(len(snakemake_parameters["ICE_shares"])):
-        if snakemake_parameters["ICE_shares"][i] + snakemake_parameters["BEV_shares"][i] != 1:
+    for i in range(len(snakemake_parameters["ICEV_shares"])):
+        if snakemake_parameters["ICEV_shares"][i] + snakemake_parameters["BEV_shares"][i] != 1:
             print("The sum of ICE vehicle share with BE vehicle share is not equal to 1!")
             sys.exit(-1)   # exit unsuccessfully
 
@@ -365,7 +365,7 @@ if __name__ == "__main__":
         model_parameters = get_model_parameters(snakemake_parameters, i)
 
 
-        # create model (i.e. PyPSA network) based on the parameters and planning horizon
+        # create model (i.e. PyPSA network) based on the parameters of a planning horizon
         network = create_model(model_parameters, i)
 
 
