@@ -15,42 +15,66 @@ import sys
 import logging
 
 def plot_EV_timeseries(n):
-     # read time-dependent variables
+     # read EV time-dependent variables
      EV_charging = -n.links_t.p1['EV battery charger'] # from EV battery point-of-view
      EV_discharging = n.links_t.p0['EV'] # from EV battery point-of-view
+     EV_soc = n.stores_t.e["EV battery storage"]/n.stores.loc["EV battery storage"].e_nom_opt
 
-     ICE_discharging_p1 = -n.links_t.p1['EV'] # from land transport bus point-of-view
-     EV_discharging_p1 = -n.links_t.p1['EV'] # from EV battery point-of-view
-     load_t = n.loads_t.p_set['land transport']
-
-     t_df = pd.DataFrame(index=n.snapshots)
+     # read general transportation time dependent variables
+     ICE_discharging_p1 = -n.links_t.p1['ICE Vehicle'] # from land transport bus point-of-view
+     EV_discharging_p1 = -n.links_t.p1['EV'] # from land transport bus point-of-view
+     H2_p1 = -n.links_t.p1['H2 Vehicle'] # from land transport bus point-of-view
+     load_t = n.loads_t.p_set['land transport'] # land transport load
+     t_df = pd.DataFrame(index=n.snapshots) # collecting all cars in a pandas dataframe
      t_df['ICE'] = ICE_discharging_p1
      t_df['EV'] = EV_discharging_p1
+     t_df['H2 Vehicle'] = H2_p1
+     t_df[t_df < 0] = 0
 
      # read capacities
-     EV_c_p_nom_opt = n.links.query('carrier == "EV battery charger"').p_nom_opt.sum()
-     EV_d_p_nom_opt = n.links.loc['EV'].p_nom_opt.sum()
+     EV_c_p_nom_opt = n.links.query('carrier == "EV battery charger"').p_nom_opt.sum() # EV charging power capacity
+     EV_d_p_nom_opt = n.links.loc['EV'].p_nom_opt.sum() # EV "driving" power capacity
 
-     EV_c_eta = n.links.query('carrier == "EV battery charger"').efficiency
+     # charge efficiency
+     EV_c_eta = n.links.query('carrier == "EV battery charger"').efficiency # efficiency of EV battery chargers
           
-     # normalize power with opt capacities
-     EV_charging_norm = EV_charging/(EV_c_p_nom_opt*EV_c_eta).item()
-     EV_discharging_norm = EV_discharging/EV_d_p_nom_opt
+     # normalize power with opt capacities to test constraints
+     EV_charging_norm = EV_charging/(EV_c_p_nom_opt*EV_c_eta).item() # normalized charging (i.e., the fraction of cars being charged in each hour)
+     EV_discharging_norm = EV_discharging/EV_d_p_nom_opt # normalized "driving" (i.e., the fraction of cars being used in each hour)
 
      # make plot of balancing of EV battery bus
      fig,ax = plt.subplots(figsize=(10,5))
-     EV_charging_norm.plot(ax=ax,label='charging')
-     EV_discharging_norm.plot(ax=ax,label='driving')
+     EV_charging_norm.plot(ax=ax,label='charging') # plotting the fraction of cars being charged
+     EV_discharging_norm.plot(ax=ax,label='driving') # plotting the fraction of cars being used 
      ax.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
+     ax.set_ylabel('Fraction of EVs [-]')
      ax.legend()
 
-     # make plot of how land transport demand is met
+     # make plot of state of charge of EV battery (full year)
      fig1,ax1 = plt.subplots(figsize=(10,5))
-     t_df.plot.area(ax=ax1,stacked=True,alpha=0.5,lw=0)
-     load_t.plot(ax=ax1,ls='--',lw=1, color='k',label='Load',zorder=10,alpha=0.5)
-     ax1.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
+     EV_soc.plot(ax=ax1,label='SOC')
      ax1.legend()
-     return fig, fig1
+
+     # make plot of state of charge of EV battery (1 day)
+     fig1_1,ax1_1 = plt.subplots(figsize=(10,5))
+     EV_soc.plot(ax=ax1_1,label='SOC')
+     ax1_1.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('5/6/2013')])
+     ax1_1.legend()
+
+     # make plot of how land transport demand is met (full year)
+     fig2,ax2 = plt.subplots(figsize=(10,5))
+     t_df.resample('w').sum().plot.area(ax=ax2,stacked=True,alpha=0.5,lw=0)
+     load_t.resample('w').sum().plot(ax=ax2,ls='--',lw=1, color='k',label='Load',zorder=10,alpha=0.5)
+     ax2.legend()
+
+     # make plot of how land transport demand is met (specified period)
+     fig3,ax3 = plt.subplots(figsize=(10,5))
+     t_df.plot.area(ax=ax3,stacked=True,alpha=0.5,lw=0)
+     load_t.plot(ax=ax3,ls='--',lw=1, color='k',label='Load',zorder=10,alpha=0.5)
+     ax3.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
+     ax3.legend()
+
+     return fig, fig1, fig1_1, fig2, fig3
 
 
 
@@ -148,9 +172,12 @@ plt.figure()
 generators.plot.bar(stacked=True)
 plt.savefig(snakemake.output.result, dpi=1200, bbox_inches='tight')
 
-fig,fig1 = plot_EV_timeseries(network)
-fig.savefig(snakemake.output.EV_times1, dpi=1200, bbox_inches='tight')
-fig1.savefig(snakemake.output.EV_times2, dpi=1200, bbox_inches='tight')
+fig,fig1,fig2,fig3,fig4 = plot_EV_timeseries(network)
+fig.savefig(snakemake.output.EV_balance, dpi=1200, bbox_inches='tight')
+fig1.savefig(snakemake.output.EV_soc_1year, dpi=1200, bbox_inches='tight')
+fig2.savefig(snakemake.output.EV_soc_1day, dpi=1200, bbox_inches='tight')
+fig3.savefig(snakemake.output.transport_balance_1year, dpi=1200, bbox_inches='tight')
+fig4.savefig(snakemake.output.transport_balance_period, dpi=1200, bbox_inches='tight')
 
 
 nb_vehicle['index']=['EV', 'ICE']

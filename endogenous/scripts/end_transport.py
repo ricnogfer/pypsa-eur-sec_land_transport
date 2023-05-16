@@ -71,13 +71,14 @@ def annuity(n,r):
     else:
         return 1/n
 
-def calculate_EV_timeseries(n,alpha):
-    cars_driving = 0.5 # Assume a certain share of the fleet that can be driving at the same time
+def calculate_EV_timeseries(n,alpha,beta=1):
+    # alpha: the share of the parked cars that can be charged at the same time
+    # beta: the share of the fleet that at maximum drive at the same time
     L_t = n.loads_t.p_set['land transport'] # load time series
     L_norm_t = L_t/max(L_t) # normalize time series
     EV_c = alpha*(1-L_norm_t) # we can charge all alpha [%] of parked cars  
-    EV_d = cars_driving*L_norm_t # 70 % of EV fleet is available for driving 
-    return EV_c, EV_d
+    #EV_d = beta*L_norm_t # % of EV fleet is available for driving (currently not in use)
+    return EV_c, L_norm_t # EV_d
 
 def transport(string, costs):
     """
@@ -156,8 +157,9 @@ def transport(string, costs):
                 carrier="solar",
                 #p_nom_max=1000, #maximum capacity can be limited due to environmental constraints
                 capital_cost = 0, #1000*costs.at['solar', 'investment']*(annuity(costs.at['solar', 'lifetime'], 0.07)+costs.at['solar', 'FOM']/100),
-                marginal_cost = costs.at['solar', 'VOM'],
-                p_max_pu = CF_solar)
+                marginal_cost = 10, #costs.at['solar', 'VOM'],
+                p_max_pu = 1, #CF_solar
+                )
     
     # Add EV links
     network.add("Bus", "EV battery bus")
@@ -170,7 +172,7 @@ def transport(string, costs):
                     #capital_cost=costs.at['battery storage', 'investment'],
                     lifetime = costs.at['battery storage', 'lifetime'])
     
-    EV_c,EV_d = calculate_EV_timeseries(network,alpha=0.5)
+    EV_c,L_norm_t = calculate_EV_timeseries(network,alpha=0.5)
 
     network.add("Carrier",'EV battery')
     bev_charge_efficiency = options['bev_charge_efficiency']
@@ -233,6 +235,7 @@ def transport(string, costs):
         capital_cost = snakemake.config['costs']['capital_cost']['ICE_vehicle']/options['energy_to_cars'] * ice_efficiency,
         efficiency = ice_efficiency,  
         efficiency2 = oil_co2*ice_efficiency,
+        p_min_pu = L_norm_t,
         p_nom_extendable=True,
     )
     
@@ -247,6 +250,7 @@ def transport(string, costs):
         capital_cost = snakemake.config['costs']['capital_cost']['E_vehicle']/options['energy_to_cars']*(ev_efficiency*bev_charge_efficiency),
         efficiency = ev_efficiency,#bev_charge_efficiency,        
         p_nom_extendable=True,
+        #p_min_pu = L_norm_t,
     )
 
     # Add H2 cars 
@@ -268,7 +272,7 @@ def transport(string, costs):
             capital_cost = 0.,
             carrier = "H2",
             p_nom_extendable=True,
-            efficiency=H2_vehicle_efficiency)
+            efficiency=H2_vehicle_efficiency),
             #committable=True,
             #p_min_pu=0,
             #p_max_pu=1) 
@@ -282,6 +286,7 @@ def transport(string, costs):
         efficiency= snakemake.config['sector']['H2_car_efficiency'],
         capital_cost = snakemake.config['costs']['capital_cost']['H2_vehicle'],#bev_charge_efficiency,        
         p_nom_extendable=True,
+        p_min_pu = L_norm_t,
     )
         
     
