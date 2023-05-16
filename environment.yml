@@ -1,3 +1,4 @@
+name: env_transport
 dependencies:
     - python=3.10
     - pypsa=0.22.1

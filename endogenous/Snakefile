@@ -1,9 +1,12 @@
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+
+
 configfile: "config.yaml"
+
 
 wildcard_constraints:
     simpl="[a-zA-Z0-9]*",
     clusters="[0-9]+m?"
-
 
 
 rule all:
@@ -15,9 +18,9 @@ rule all:
 	
 
 rule plots:
-    input: 
+    input:
         expand('results/elec_s{simpl}_{planning_horizons}.nc',**config['scenario'])
-    output: 
+    output:
         result = "results/generators.png",
         vehiclenb = "results/vehiclenb.png",
         EV_balance = 'results/EV_balance.png',
@@ -36,5 +39,25 @@ rule transport:
 	network = 'results/elec_s{simpl}_{planning_horizons}.nc'
     script: "scripts/end_transport.py"
 
- 
-   
+
+# rule to download the tool PyPSATopo
+rule retrieve_topo:
+    input:
+        HTTPRemoteProvider().remote("https://raw.githubusercontent.com/ricnogfer/pypsatopo/v0.5.0/pypsatopo.py", keep_local = True)
+    output:
+        "scripts/pypsatopo.py"
+    run:
+        shell("mv {input} scripts/pypsatopo.py")
+        shell("chmod u+x scripts/pypsatopo.py")
+
+
+# rule to generate the topographical representation of a network through PyPSATopo
+rule generate_topo:
+    input:
+        network = expand("results/elec_s{simpl}_{planning_horizons}.nc", **config["scenario"])
+    output:
+        expand("results/elec_s{simpl}_{planning_horizons}.svg", **config["scenario"])
+    shell:
+        "scripts/pypsatopo.py -cc -nb -nq {input.network}"
+
+
