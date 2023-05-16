@@ -262,7 +262,7 @@ def get_model_parameters(snakemake_parameters):
     # get oil generator costs
     oil = technology_costs.loc["oil"].set_index("parameter")
     parameters["oil_capital_cost"] = 0   # set to 0 since oil is imported to Europe (i.e. no relevant capital cost associated with oil generators)
-    parameters["oil_marginal_cost"] = oil.at["VOM", "value"]
+    parameters["oil_marginal_cost"] = oil.at["fuel", "value"]
 
 
     # get solar generator costs
