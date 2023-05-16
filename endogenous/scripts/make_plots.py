@@ -22,30 +22,30 @@ def plot_EV_timeseries(n):
 
      # read general transportation time dependent variables
      ICE_discharging_p1 = -n.links_t.p1['ICE Vehicle'] # from land transport bus point-of-view
-     EV_discharging_p1 = -n.links_t.p1['EV'] # from EV battery point-of-view
-     H2_p1 = -n.links_t.p1['H2 Vehicle'] # from EV battery point-of-view
-     load_t = n.loads_t.p_set['land transport']
-     t_df = pd.DataFrame(index=n.snapshots)
+     EV_discharging_p1 = -n.links_t.p1['EV'] # from land transport bus point-of-view
+     H2_p1 = -n.links_t.p1['H2 Vehicle'] # from land transport bus point-of-view
+     load_t = n.loads_t.p_set['land transport'] # land transport load
+     t_df = pd.DataFrame(index=n.snapshots) # collecting all cars in a pandas dataframe
      t_df['ICE'] = ICE_discharging_p1
      t_df['EV'] = EV_discharging_p1
      t_df['H2 Vehicle'] = H2_p1
      t_df[t_df < 0] = 0
 
      # read capacities
-     EV_c_p_nom_opt = n.links.query('carrier == "EV battery charger"').p_nom_opt.sum()
-     EV_d_p_nom_opt = n.links.loc['EV'].p_nom_opt.sum()
+     EV_c_p_nom_opt = n.links.query('carrier == "EV battery charger"').p_nom_opt.sum() # EV charging power capacity
+     EV_d_p_nom_opt = n.links.loc['EV'].p_nom_opt.sum() # EV "driving" power capacity
 
      # charge efficiency
-     EV_c_eta = n.links.query('carrier == "EV battery charger"').efficiency
+     EV_c_eta = n.links.query('carrier == "EV battery charger"').efficiency # efficiency of EV battery chargers
           
      # normalize power with opt capacities to test constraints
-     EV_charging_norm = EV_charging/(EV_c_p_nom_opt*EV_c_eta).item()
-     EV_discharging_norm = EV_discharging/EV_d_p_nom_opt
+     EV_charging_norm = EV_charging/(EV_c_p_nom_opt*EV_c_eta).item() # normalized charging (i.e., the fraction of cars being charged in each hour)
+     EV_discharging_norm = EV_discharging/EV_d_p_nom_opt # normalized "driving" (i.e., the fraction of cars being used in each hour)
 
      # make plot of balancing of EV battery bus
      fig,ax = plt.subplots(figsize=(10,5))
-     EV_charging_norm.plot(ax=ax,label='charging') # should not exceed alpha
-     EV_discharging_norm.plot(ax=ax,label='driving') # should not exceed the allowed maximum number of cars driving at the same time 
+     EV_charging_norm.plot(ax=ax,label='charging') # plotting the fraction of cars being charged
+     EV_discharging_norm.plot(ax=ax,label='driving') # plotting the fraction of cars being used 
      ax.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
      ax.set_ylabel('Fraction of EVs [-]')
      ax.legend()
