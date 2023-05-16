@@ -7,8 +7,7 @@
 
 
 # TODO:
-# 1) generate results for multiple years (as specified in the "sector:land_transport_electric_share" and "sector:land_transport_ice_share" options in the config.yaml file)
-# 2) use CO2 emission values from CSV file (instead of being hard-coded to 1.0 as it is currently)
+# 1) use CO2 emission values from CSV file (instead of being hard-coded to 1.0 as it is currently)
 
 
 
@@ -27,12 +26,14 @@ _NODE = "DK1 0"   # node within country to be analised (chosen arbitrarly)
 
 
 # function to create model (i.e. PyPSA network)
-def create_model(parameters):
+def create_model(parameters, index):
     """
     Parameters
     ----------
     parameters : a Python dictionary (dict())
         Parameters needed to create and configure the model (i.e. PyPSA network) properly.
+    index : a Python integer (int)
+        Index representing the parameters of a certain planning horizon.
 
     Returns
     -------
@@ -67,10 +68,10 @@ def create_model(parameters):
                 marginal_cost = parameters["oil_marginal_cost"])
 
 
-    if parameters["ICE_shares"][0] > 0:
+    if parameters["ICE_shares"][index] > 0:
 
         # add load "ICE" to bus "oil" with associated demand
-        value = parameters["transport_demand"] * parameters["ICE_shares"][0] / parameters["ICE_efficiency"]
+        value = parameters["transport_demand"] * parameters["ICE_shares"][index] / parameters["ICE_efficiency"]
         network.add("Load",
                     "ICE",
                     bus = "oil",
@@ -93,7 +94,7 @@ def create_model(parameters):
                 marginal_cost = parameters["solar_marginal_cost"])
 
 
-    if parameters["BEV_shares"][0] > 0:
+    if parameters["BEV_shares"][index] > 0:
 
         # add bus "BEV" to network
         network.add("Bus",
@@ -101,7 +102,7 @@ def create_model(parameters):
 
 
         # add load "BEV" to bus "BEV" with associated demand
-        value = parameters["transport_demand"] * parameters["BEV_shares"][0]
+        value = parameters["transport_demand"] * parameters["BEV_shares"][index]
         network.add("Load",
                     "BEV",
                     bus = "BEV",
@@ -109,9 +110,9 @@ def create_model(parameters):
 
 
         # add link "electricity_2_BEV" which connects bus "electricity" to bus "BEV" with associated availability and efficiency
-        value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]
+        value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_charge_rate"]
         network.add("Link",
-                    "electricity_2_BEV",
+                    "Charger",
                     bus0 = "electricity",
                     bus1 = "BEV",
                     p_nom = value,
@@ -121,9 +122,9 @@ def create_model(parameters):
 
         # enable BE-vehicle batteries to send power to the grid  (i.e. bus "electricity")
         if parameters["BEV_V2G"]:
-            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_charge_rate"]
+            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_charge_rate"]
             network.add("Link",
-                        "BEV_2_electricity",
+                        "Discharger",
                         bus0 = "BEV",
                         bus1 = "electricity",
                         p_nom = value,
@@ -133,7 +134,7 @@ def create_model(parameters):
 
         # enable BE-vehicle batteries based on demand-side management (DSM) profile
         if parameters["BEV_DSM"]:
-            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][0] * parameters["BEV_availability"] * parameters["BEV_energy"]
+            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_availability"] * parameters["BEV_energy"]
             network.add("Store",
                         "battery",
                         bus = "BEV",
@@ -168,12 +169,13 @@ def get_snakemake_parameters():
 
     # check how present module was launched
     if "snakemake" in globals():   # through Snakemake
-        parameters["technology_costs_file"] = snakemake.input["technology_costs_file"]
+        parameters["technology_costs_file"] = tuple(snakemake.input["technology_costs_file"])
         parameters["solar_profile_file"] = snakemake.input["solar_profile_file"]
         parameters["transport_data_file"] = snakemake.input["transport_data_file"][0]
         parameters["transport_demand_file"] = snakemake.input["transport_demand_file"][0]
         parameters["availability_profile_file"] = snakemake.input["availability_profile_file"][0]
         parameters["DSM_profile_file"] = snakemake.input["dsm_profile_file"][0]
+        parameters["planning_horizons"] = tuple(snakemake.config["scenario"]["planning_horizons"])
         parameters["ICE_shares"] = tuple(snakemake.config["sector"]["land_transport_ice_share"].values())
         parameters["BEV_shares"] = tuple(snakemake.config["sector"]["land_transport_electric_share"].values())
         parameters["ICE_efficiency"] = snakemake.config["sector"]["transport_internal_combustion_efficiency"]
@@ -191,14 +193,15 @@ def get_snakemake_parameters():
         result_path = "results"
         if not os.path.exists(result_path):
             os.makedirs(result_path)
-        parameters["technology_costs_file"] = "%s/costs_2025.csv" % resource_path
+        parameters["technology_costs_file"] = ("%s/costs_2025.csv" % resource_path, )
         parameters["solar_profile_file"] = "%s/solar_profile_1979_2017.csv" % resource_path
         parameters["transport_data_file"] = "%s/transport_data_s_37.csv" % resource_path
         parameters["transport_demand_file"] = "%s/transport_demand_s_37.csv" % resource_path
         parameters["availability_profile_file"] = "%s/avail_profile_s_37.csv" % resource_path
         parameters["DSM_profile_file"] = "%s/dsm_profile_s_37.csv" % resource_path
-        parameters["ICE_shares"] = (0.9, 0.75, 0.4, 0.0)
-        parameters["BEV_shares"] = (0.1, 0.25, 0.6, 1.0)
+        parameters["planning_horizons"] = (2025, )
+        parameters["ICE_shares"] = (0.9, )
+        parameters["BEV_shares"] = (0.1, )
         parameters["ICE_efficiency"] = 0.3
         parameters["BEV_DSM"] = True
         parameters["BEV_availability"] = 0.5
@@ -216,12 +219,14 @@ def get_snakemake_parameters():
 
 
 # function to get parameters that the model (i.e. PyPSA network) will be based upon
-def get_model_parameters(snakemake_parameters):
+def get_model_parameters(snakemake_parameters, index):
     """
     Parameters
     ----------
     snakemake_parameters : a Python dictionary (dict())
         Contains the Snakemake parameters needed to create the model (i.e. PyPSA network) parameters.
+    index : a Python integer (int)
+        Index representing the parameters of a certain planning horizon.
 
     Returns
     -------
@@ -256,7 +261,7 @@ def get_model_parameters(snakemake_parameters):
 
 
     # read technology costs (CSV) file
-    technology_costs = pandas.read_csv(snakemake_parameters["technology_costs_file"], index_col = "technology")
+    technology_costs = pandas.read_csv(snakemake_parameters["technology_costs_file"][index], index_col = "technology")
 
 
     # get oil generator costs
@@ -328,61 +333,87 @@ if __name__ == "__main__":
     snakemake_parameters = get_snakemake_parameters()
 
 
+    # check that Snakemake parameters "planning_horizons", "ICE_shares" and "BEV_shares" are properly specified
+    if not snakemake_parameters["planning_horizons"] or not snakemake_parameters["ICE_shares"] or not snakemake_parameters["BEV_shares"]:
+        print("The Snakemake parameters 'planning_horizons', 'ICE_shares' and/or 'BEV_shares' is/are not specified!")
+        sys.exit(-1)   # exit unsuccessfully
+    if len(snakemake_parameters["planning_horizons"]) != len(snakemake_parameters["ICE_shares"]) != len(snakemake_parameters["BEV_shares"]):
+        print("The number of Snakemake parameters in 'planning_horizons', 'ICE_shares' and 'BEV_shares' do not match!")
+        sys.exit(-1)   # exit unsuccessfully
+
+
     # check that ICE/BE-vehicle shares are properly specified
-    if not snakemake_parameters["ICE_shares"] or not snakemake_parameters["BEV_shares"]:
-        print("The ICE vehicle shares and/or BE vehicle shares is/are not specified!")
-        sys.exit(-1)   # exit unsuccessfully
-    if len(snakemake_parameters["ICE_shares"]) != len(snakemake_parameters["BEV_shares"]):
-        print("The number of ICE vehicle shares does not match the number of BE vehicle shares!")
-        sys.exit(-1)   # exit unsuccessfully
     for i in range(len(snakemake_parameters["ICE_shares"])):
         if snakemake_parameters["ICE_shares"][i] + snakemake_parameters["BEV_shares"][i] != 1:
             print("The sum of ICE vehicle share with BE vehicle share is not equal to 1!")
             sys.exit(-1)   # exit unsuccessfully
 
 
-    # get model parameters
-    model_parameters = get_model_parameters(snakemake_parameters)
 
-
-    # create model (i.e. PyPSA network) based on the parameters
-    network = create_model(model_parameters)
-
-
-    # solve network using Gurobi
-    status = network.lopf(pyomo = False, solver_name = "gurobi")
-    if status[0] != "ok":
-        print("The solver did not reach a solution (infeasible or unbounded)!")
+    # open file to write results
+    try:
+        handle = open(snakemake_parameters["result_txt_file"], "w")
+    except:
+        print("Errow when creating/opening file '%s'" % snakemake_parameters["result_txt_file"])
         sys.exit(-1)   # exit unsuccessfully
 
 
-    # print results
-    print("Objective value=%.2f M€" % (network.objective / 10**6))
-    print("Optimal nominal power oil generator=%.2f MW" % network.generators.p_nom_opt["oil"])
-    print("Optimal nominal power solar generator=%.2f MW" % network.generators.p_nom_opt["solar"])
+    # loop through planning horizons
+    for i in range(len(snakemake_parameters["planning_horizons"])):
+
+        # get model parameters
+        model_parameters = get_model_parameters(snakemake_parameters, i)
 
 
-    # write results to file
-    with open(snakemake_parameters["result_txt_file"], "w") as handle:
-        try:
-            handle.write("Objective value=%.2f M€\n" % (network.objective / 10**6))
-            handle.write("Optimal nominal power oil generator=%.2f MW\n" % network.generators.p_nom_opt["oil"])
-            handle.write("Optimal nominal power solar generator=%.2f MW\n" % network.generators.p_nom_opt["solar"])
-        except:
+        # create model (i.e. PyPSA network) based on the parameters and planning horizon
+        network = create_model(model_parameters, i)
+
+
+        # solve network using Gurobi
+        status = network.lopf(pyomo = False, solver_name = "gurobi")
+        if status[0] != "ok":
+            print("The solver did not reach a solution (infeasible or unbounded)!")
             sys.exit(-1)   # exit unsuccessfully
 
 
-    # get generator plot
-    plot = network.generators_t.p.plot()
+        # print results
+        print("Year of the almighty Lord %d AC:" % snakemake_parameters["planning_horizons"][i])
+        print("   Objective value=%.2f M€" % (network.objective / 10**6))
+        print("   Optimal nominal power oil generator=%.2f MW" % network.generators.p_nom_opt["oil"])
+        print("   Optimal nominal power solar generator=%.2f MW" % network.generators.p_nom_opt["solar"])
 
 
-    # plot store results (if environment allows it - e.g. JupyterLab, Spyder IDE)
-    #network.stores_t.p.plot()
+        # write results to file
+        try:
+            handle.write("Year of the almighty Lord %d AC:\n" % snakemake_parameters["planning_horizons"][i])
+            handle.write("   Objective value=%.2f M€\n" % (network.objective / 10**6))
+            handle.write("   Optimal nominal power oil generator=%.2f MW\n" % network.generators.p_nom_opt["oil"])
+            handle.write("   Optimal nominal power solar generator=%.2f MW\n" % network.generators.p_nom_opt["solar"])
+            handle.write("\n")
+        except:
+            print("Errow when writing results to file '%s'" % snakemake_parameters["result_txt_file"])
+            handle.close()
+            sys.exit(-1)   # exit unsuccessfully
 
 
-    # save generator plot to file (in png format)
-    figure = plot.get_figure()
-    figure.savefig(snakemake_parameters["result_png_file"])
+        # get generator plot
+        plot = network.generators_t.p.plot()
+
+
+        # plot store results (if environment supports it - e.g. JupyterLab, Spyder IDE)
+        try:
+            network.stores_t.p.plot()
+        except:
+            print("Skip plotting results given that current environment does not support it...")
+
+
+        # save generator plot to file (in png format)
+        figure = plot.get_figure()
+        figure.savefig(snakemake_parameters["result_png_file"])
+
+
+    # close file handle
+    handle.close()
 
 
     sys.exit(0)   # exit successfully

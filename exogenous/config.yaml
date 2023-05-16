@@ -6,6 +6,14 @@
 scenario:
   clusters:
     - 37
+  planning_horizons: # investment years for myopic and perfect; for overnight, year of cost assumptions can be different and is defined under 'costs'
+    - 2020
+    - 2025
+    - 2030
+    - 2035
+    - 2040
+    - 2045
+    - 2050
 
 
 snapshots:
@@ -14,6 +22,22 @@ snapshots:
 
 
 sector:
+  land_transport_electric_share:
+    2020: 0.0
+    2025: 0.2
+    2030: 0.3
+    2035: 0.4
+    2040: 0.6
+    2045: 0.8
+    2050: 1.0
+  land_transport_ice_share:
+    2020: 1.0
+    2025: 0.8
+    2030: 0.7
+    2035: 0.6
+    2040: 0.4
+    2045: 0.2
+    2050: 0.0
   bev_dsm: true #turns on EV battery
   bev_availability: 0.5  #How many cars do smart charging
   bev_energy: 0.05  #average battery size in MWh
@@ -23,37 +47,13 @@ sector:
   bev_avail_max: 0.95
   bev_avail_mean: 0.8
   v2g: true #allows feed-in to grid from EV battery
-
-
-  land_transport_electric_share:
-    2020: 0.1
-    2030: 0.25
-    2040: 0.6
-    2050: 1.0
-
-  land_transport_ice_share:
-    2020: 0.9
-    2030: 0.75
-    2040: 0.4
-    2050: 0.0
-
-
   transport_internal_combustion_efficiency: 0.3
-  agriculture_machinery_electric_share: 0
-  agriculture_machinery_oil_share: 1
-  agriculture_machinery_fuel_efficiency: 0.7 # fuel oil per use
-  agriculture_machinery_electric_efficiency: 0.3 # electricity per use
   MWh_MeOH_per_MWh_H2: 0.8787 # in LHV, source: DECHEMA (2017): Low carbon energy and feedstock for the European chemical industry , pg. 64.
   MWh_MeOH_per_tCO2: 4.0321 # in LHV, source: DECHEMA (2017): Low carbon energy and feedstock for the European chemical industry , pg. 64.
   MWh_MeOH_per_MWh_e: 3.6907 # in LHV, source: DECHEMA (2017): Low carbon energy and feedstock for the European chemical industry , pg. 64.
-  time_dep_hp_cop: true #time dependent heat pump coefficient of performance
-  solar_thermal: true
   solar_cf_correction: 0.788457  # =  >>> 1/1.2683
   marginal_cost_storage: 0.0 #1e-4
-  co2_sequestration_potential: 200  #MtCO2/a sequestration potential for Europe
-  co2_sequestration_cost: 10   #EUR/tCO2 for sequestration of CO2
   co2_network: false
-  cc_fraction: 0.9  # default fraction of CO2 captured with post-combustion capture
   electricity_distribution_grid: true
   electricity_distribution_grid_cost_factor: 1.0  #multiplies cost in data/costs.csv
   electricity_grid_connection: true  # only applies to onshore wind and utility PV
