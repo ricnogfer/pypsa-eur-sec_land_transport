@@ -185,8 +185,8 @@ def get_snakemake_parameters():
         parameters["BEV_charge_rate"] = snakemake.config["sector"]["bev_charge_rate"]
         parameters["BEV_charge_efficiency"] = snakemake.config["sector"]["bev_charge_efficiency"]
         parameters["BEV_V2G"] = snakemake.config["sector"]["v2g"]
-        parameters["result_txt_file"] = snakemake.output["result_txt_file"]
-        parameters["result_png_file"] = snakemake.output["result_png_file"]
+        parameters["generators_summary_file"] = snakemake.output["generators_summary_file"]
+        parameters["generators_plot_file"] = tuple(snakemake.output["generators_plot_file"])
         parameters["snapshots"] = pandas.date_range("%sT00:00Z" % snakemake.config["snapshots"]["start"], "%sT23:00Z" % snakemake.config["snapshots"]["end"], freq = "H")
     else:   # through terminal
         resource_path = "../resources/data"
@@ -209,8 +209,8 @@ def get_snakemake_parameters():
         parameters["BEV_charge_efficiency"] = 0.9
         parameters["BEV_charge_rate"] = 0.011
         parameters["BEV_V2G"] = True
-        parameters["result_txt_file"] = "%s/%s" % (result_path, "results.txt")
-        parameters["result_png_file"] = "%s/%s" % (result_path, "results.png")
+        parameters["generators_summary_file"] = "%s/%s" % (result_path, "generators_summary.txt")
+        parameters["generators_plot_file"] = ("%s/%s" % (result_path, "generators_2025.png"), )
         parameters["snapshots"] = pandas.date_range("2013-01-01T00:00Z", "2013-12-31T23:00Z", freq = "H")
 
 
@@ -352,9 +352,9 @@ if __name__ == "__main__":
 
     # open file to write results
     try:
-        handle = open(snakemake_parameters["result_txt_file"], "w")
+        handle = open(snakemake_parameters["generators_summary_file"], "w")
     except:
-        print("Errow when creating/opening file '%s'" % snakemake_parameters["result_txt_file"])
+        print("Error when creating/opening file '%s'" % snakemake_parameters["generators_summary_file"])
         sys.exit(-1)   # exit unsuccessfully
 
 
@@ -391,7 +391,7 @@ if __name__ == "__main__":
             handle.write("   Optimal nominal power solar generator=%.2f MW\n" % network.generators.p_nom_opt["solar"])
             handle.write("\n")
         except:
-            print("Errow when writing results to file '%s'" % snakemake_parameters["result_txt_file"])
+            print("Error when writing results to file '%s'" % snakemake_parameters["generators_summary_file"])
             handle.close()
             sys.exit(-1)   # exit unsuccessfully
 
@@ -400,16 +400,9 @@ if __name__ == "__main__":
         plot = network.generators_t.p.plot()
 
 
-        # plot store results (if environment supports it - e.g. JupyterLab, Spyder IDE)
-        try:
-            network.stores_t.p.plot()
-        except:
-            print("Skip plotting results given that current environment does not support it...")
-
-
-        # save generator plot to file (in png format)
+        # save generators plot to file (in png format)
         figure = plot.get_figure()
-        figure.savefig(snakemake_parameters["result_png_file"])
+        figure.savefig(snakemake_parameters["generators_plot_file"][i])
 
 
     # close file handle

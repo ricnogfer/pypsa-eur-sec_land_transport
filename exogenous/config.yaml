@@ -48,13 +48,4 @@ sector:
   bev_avail_mean: 0.8
   v2g: true #allows feed-in to grid from EV battery
   transport_internal_combustion_efficiency: 0.3
-  MWh_MeOH_per_MWh_H2: 0.8787 # in LHV, source: DECHEMA (2017): Low carbon energy and feedstock for the European chemical industry , pg. 64.
-  MWh_MeOH_per_tCO2: 4.0321 # in LHV, source: DECHEMA (2017): Low carbon energy and feedstock for the European chemical industry , pg. 64.
-  MWh_MeOH_per_MWh_e: 3.6907 # in LHV, source: DECHEMA (2017): Low carbon energy and feedstock for the European chemical industry , pg. 64.
-  solar_cf_correction: 0.788457  # =  >>> 1/1.2683
-  marginal_cost_storage: 0.0 #1e-4
-  co2_network: false
-  electricity_distribution_grid: true
-  electricity_distribution_grid_cost_factor: 1.0  #multiplies cost in data/costs.csv
-  electricity_grid_connection: true  # only applies to onshore wind and utility PV
 
