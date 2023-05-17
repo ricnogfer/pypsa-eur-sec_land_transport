@@ -48,3 +48,33 @@ sector:
   icev_consumption_per_unit: 0.05   # arbitrary value
   bev_consumption_per_unit: 0.01   # arbitrary value
 
+
+costs:
+  year: 2030
+  version: v0.5.0
+  rooftop_share: 0.14  # based on the potentials, assuming  (0.1 kW/m2 and 10 m2/person)
+  fill_values:
+    FOM: 0
+    VOM: 0
+    efficiency: 1
+    fuel: 0
+    investment: 0
+    lifetime: 25
+    "CO2 intensity": 0
+    "discount rate": 0.07
+  # Marginal and capital costs can be overwritten
+  # capital_cost:
+  #   onwind: 500
+  marginal_cost:
+    solar: 0.01
+    onwind: 0.015
+    offwind: 0.015
+    hydro: 0.0
+    H2: 0.0
+    electrolysis: 0.0
+    fuel cell: 0.0
+    battery: 0.0
+    battery inverter: 0.0
+  emission_prices: # in currency per tonne emission, only used with the option Ep
+    co2: 0.0
+
