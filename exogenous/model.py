@@ -237,6 +237,29 @@ def get_model_parameters(snakemake_parameters, index):
         Contains the parameters that the model (i.e. PyPSA network) will be based upon.
     """
 
+
+
+    def calculate_annuity(period, discount_rate):
+        """
+        Parameters
+        ----------
+        period : a Python integer (int)
+            Contains the fixed length of time to receive payments from an investment.
+        discount_rate : a Python float (float)
+            Contains the assumed rate of return that is used to determine the present value of future payments.
+
+        Returns
+        -------
+        None.
+        """
+
+        if discount_rate > 0:
+            return discount_rate / (1.0 - 1.0 / (1.0 + discount_rate) ** period)
+
+        return 1 / period
+
+
+
     parameters = dict()
 
 
@@ -252,7 +275,9 @@ def get_model_parameters(snakemake_parameters, index):
 
     # get solar generator costs
     solar = technology_costs.loc["solar"]
-    parameters["solar_capital_cost"] = solar.at["investment"]
+    solar_investment = solar.at["investment"]
+    solar_FOM = calculate_annuity(solar.at["lifetime"], 0.07) + solar.at["FOM"] / 100.0   # in percentage
+    parameters["solar_capital_cost"] = solar_investment + solar_investment * solar_FOM
     parameters["solar_marginal_cost"] = solar.at["VOM"]
 
 
