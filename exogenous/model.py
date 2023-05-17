@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 
 
+
 # This Python module implements an exogenous-driven land transport (toy) model involving ICE/BE-based vehicles (represented in
-# https://github.com/ricnogfer/pypsa-eur-sec_land_transport/blob/master/resources/docs/exogenous_endogenous_land_transport.pdf)
-
-
-
-# TODO:
-# 1) use CO2 emission values from CSV file (instead of being hard-coded to 1.0 as it is currently)
+# https://raw.githubusercontent.com/ricnogfer/pypsa-eur-sec_land_transport/resources/docs/exogenous_land_transport.svg)
 
 
 
@@ -16,6 +12,7 @@ import os
 import sys
 import pypsa
 import pandas
+import matplotlib.pyplot as plt
 
 
 
@@ -68,14 +65,12 @@ def create_model(parameters, index):
                 marginal_cost = parameters["oil_marginal_cost"])
 
 
-    if parameters["ICEV_shares"][index] > 0:
-
-        # add load "ICEV" to bus "oil" with associated demand
-        value = parameters["transport_demand"] * parameters["ICEV_shares"][index] / parameters["ICEV_efficiency"]
-        network.add("Load",
-                    "ICEV",
-                    bus = "oil",
-                    p_set = value)
+    # add load "ICEV" to bus "oil" with associated demand
+    value = parameters["transport_demand"] * parameters["ICEV_shares"][index] / parameters["ICEV_efficiency"]
+    network.add("Load",
+                "ICEV",
+                bus = "oil",
+                p_set = value)
 
 
     # add bus "electricity" to network
@@ -94,54 +89,52 @@ def create_model(parameters, index):
                 marginal_cost = parameters["solar_marginal_cost"])
 
 
-    if parameters["BEV_shares"][index] > 0:
-
-        # add bus "BEV" to network
-        network.add("Bus",
-                    "BEV")
+    # add bus "BEV" to network
+    network.add("Bus",
+                "BEV")
 
 
-        # add load "BEV" to bus "BEV" with associated demand
-        value = parameters["transport_demand"] * parameters["BEV_shares"][index]
-        network.add("Load",
-                    "BEV",
-                    bus = "BEV",
-                    p_set = value)
+    # add load "BEV" to bus "BEV" with associated demand
+    value = parameters["transport_demand"] * parameters["BEV_shares"][index]
+    network.add("Load",
+                "BEV",
+                bus = "BEV",
+                p_set = value)
 
 
-        # add link "electricity_2_BEV" which connects bus "electricity" to bus "BEV" with associated availability and efficiency
+    # add link "electricity_2_BEV" which connects bus "electricity" to bus "BEV" with associated availability and efficiency
+    value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_charge_rate"]
+    network.add("Link",
+                "charge",
+                bus0 = "electricity",
+                bus1 = "BEV",
+                p_nom = value,
+                p_max_pu = parameters["availability_profile"].values,
+                efficiency = parameters["BEV_charge_efficiency"])
+
+
+    # enable BE-vehicle batteries to send power to the grid  (i.e. bus "electricity")
+    if parameters["BEV_V2G"]:
         value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_charge_rate"]
         network.add("Link",
-                    "charge",
-                    bus0 = "electricity",
-                    bus1 = "BEV",
+                    "discharge",
+                    bus0 = "BEV",
+                    bus1 = "electricity",
                     p_nom = value,
                     p_max_pu = parameters["availability_profile"].values,
                     efficiency = parameters["BEV_charge_efficiency"])
 
 
-        # enable BE-vehicle batteries to send power to the grid  (i.e. bus "electricity")
-        if parameters["BEV_V2G"]:
-            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_charge_rate"]
-            network.add("Link",
-                        "discharge",
-                        bus0 = "BEV",
-                        bus1 = "electricity",
-                        p_nom = value,
-                        p_max_pu = parameters["availability_profile"].values,
-                        efficiency = parameters["BEV_charge_efficiency"])
-
-
-        # enable BE-vehicle batteries based on demand-side management (DSM) profile
-        if parameters["BEV_DSM"]:
-            value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_availability"] * parameters["BEV_energy"]
-            network.add("Store",
-                        "battery",
-                        bus = "BEV",
-                        e_cyclic = True,
-                        e_nom = value,
-                        e_max_pu = 1,
-                        e_min_pu = parameters["DSM_profile"].values)
+    # enable BE-vehicle batteries based on demand-side management (DSM) profile
+    if parameters["BEV_DSM"]:
+        value = parameters["transport_data"]["number cars"] * parameters["BEV_shares"][index] * parameters["BEV_availability"] * parameters["BEV_energy"]
+        network.add("Store",
+                    "battery",
+                    bus = "BEV",
+                    e_cyclic = True,
+                    e_nom = value,
+                    e_max_pu = 1,
+                    e_min_pu = parameters["DSM_profile"].values)
 
 
     # add global constraint "global_constraint_co2" for CO2 emissions
@@ -185,8 +178,12 @@ def get_snakemake_parameters():
         parameters["BEV_charge_rate"] = snakemake.config["sector"]["bev_charge_rate"]
         parameters["BEV_charge_efficiency"] = snakemake.config["sector"]["bev_charge_efficiency"]
         parameters["BEV_V2G"] = snakemake.config["sector"]["v2g"]
-        parameters["generators_summary_file"] = snakemake.output["generators_summary_file"]
-        parameters["generators_plot_file"] = tuple(snakemake.output["generators_plot_file"])
+        parameters["ICEV_consumption_per_unit"] = snakemake.config["sector"]["icev_consumption_per_unit"]
+        parameters["BEV_consumption_per_unit"] = snakemake.config["sector"]["bev_consumption_per_unit"]
+        parameters["summary_file"] = snakemake.output["summary_file"]
+        parameters["generators_file"] = tuple(snakemake.output["generators_file"])
+        parameters["stores_file"] = tuple(snakemake.output["stores_file"])
+        parameters["vehicle_file"] = snakemake.output["vehicle_file"]
         parameters["snapshots"] = pandas.date_range("%sT00:00Z" % snakemake.config["snapshots"]["start"], "%sT23:00Z" % snakemake.config["snapshots"]["end"], freq = "H")
     else:   # through terminal
         resource_path = "../resources/data"
@@ -209,8 +206,12 @@ def get_snakemake_parameters():
         parameters["BEV_charge_efficiency"] = 0.9
         parameters["BEV_charge_rate"] = 0.011
         parameters["BEV_V2G"] = True
-        parameters["generators_summary_file"] = "%s/%s" % (result_path, "generators_summary.txt")
-        parameters["generators_plot_file"] = ("%s/%s" % (result_path, "generators_2025.png"), )
+        parameters["ICEV_consumption_per_unit"] = 0.05   # arbitrary value
+        parameters["BEV_consumption_per_unit"] = 0.01   # arbitrary value
+        parameters["summary_file"] = "%s/summary.txt" % result_path
+        parameters["generators_file"] = ("%s/generators_2025.png" % result_path, )
+        parameters["stores_file"] = ("%s/stores_2025.png" % result_path, )
+        parameters["vehicle_file"] = "%s/vehicle.png" % result_path
         parameters["snapshots"] = pandas.date_range("2013-01-01T00:00Z", "2013-12-31T23:00Z", freq = "H")
 
 
@@ -329,6 +330,11 @@ def get_model_parameters(snakemake_parameters, index):
 if __name__ == "__main__":
 
 
+    # declare lists to hold ICE/BE-based vehicle units throughout planning horizons
+    ICEV_units = list()
+    BEV_units = list()
+
+
     # get Snakemake parameters
     snakemake_parameters = get_snakemake_parameters()
 
@@ -342,19 +348,18 @@ if __name__ == "__main__":
         sys.exit(-1)   # exit unsuccessfully
 
 
-    # check that ICE/BE-vehicle shares are properly specified
+    # check that ICE/BE-based vehicle shares are properly specified
     for i in range(len(snakemake_parameters["ICEV_shares"])):
         if snakemake_parameters["ICEV_shares"][i] + snakemake_parameters["BEV_shares"][i] != 1:
             print("The sum of ICE vehicle share with BE vehicle share is not equal to 1!")
             sys.exit(-1)   # exit unsuccessfully
 
 
-
     # open file to write results
     try:
-        handle = open(snakemake_parameters["generators_summary_file"], "w")
+        handle = open(snakemake_parameters["summary_file"], "w")
     except:
-        print("Error when creating/opening file '%s'" % snakemake_parameters["generators_summary_file"])
+        print("Error when creating/opening file '%s'" % snakemake_parameters["summary_file"])
         sys.exit(-1)   # exit unsuccessfully
 
 
@@ -365,7 +370,7 @@ if __name__ == "__main__":
         model_parameters = get_model_parameters(snakemake_parameters, i)
 
 
-        # create model (i.e. PyPSA network) based on the parameters of a planning horizon
+        # create model (i.e. PyPSA network) based on the parameters of the planning horizon
         network = create_model(model_parameters, i)
 
 
@@ -376,37 +381,63 @@ if __name__ == "__main__":
             sys.exit(-1)   # exit unsuccessfully
 
 
+        # calculate ICE/BE-based vehicle units of the planning horizon
+        ICEV_units.append(network.loads_t.p_set["ICEV"].max() / snakemake_parameters["ICEV_consumption_per_unit"])   # TODO: check if logic is correct
+        BEV_units.append(network.loads_t.p_set["BEV"].max() / snakemake_parameters["BEV_consumption_per_unit"])   # TODO: check if logic is correct
+
+
         # print results
         print("Year of the almighty Lord %d AC:" % snakemake_parameters["planning_horizons"][i])
         print("   Objective value=%.2f M€" % (network.objective / 10**6))
-        print("   Optimal nominal power oil generator=%.2f MW" % network.generators.p_nom_opt["oil"])
-        print("   Optimal nominal power solar generator=%.2f MW" % network.generators.p_nom_opt["solar"])
+        print("   Optimal nominal power of oil generator=%.2f MW" % network.generators.p_nom_opt["oil"])
+        print("   Optimal nominal power of solar generator=%.2f MW" % network.generators.p_nom_opt["solar"])
+        print("   Optimal nominal energy of battery=%.2f MWh" % network.stores.e_nom_opt["battery"])
+        print("   Number of ICEV=%d units" % ICEV_units[-1])
+        print("   Number of BEV=%d units" % BEV_units[-1])
 
 
         # write results to file
         try:
             handle.write("Year of the almighty Lord %d AC:\n" % snakemake_parameters["planning_horizons"][i])
             handle.write("   Objective value=%.2f M€\n" % (network.objective / 10**6))
-            handle.write("   Optimal nominal power oil generator=%.2f MW\n" % network.generators.p_nom_opt["oil"])
-            handle.write("   Optimal nominal power solar generator=%.2f MW\n" % network.generators.p_nom_opt["solar"])
+            handle.write("   Optimal nominal power of oil generator=%.2f MW\n" % network.generators.p_nom_opt["oil"])
+            handle.write("   Optimal nominal power of solar generator=%.2f MW\n" % network.generators.p_nom_opt["solar"])
+            handle.write("   Optimal nominal energy of battery=%.2f MWh\n" % network.stores.e_nom_opt["battery"])
+            handle.write("   Number of ICEV=%d units\n" % ICEV_units[-1])
+            handle.write("   Number of BEV=%d units\n" % BEV_units[-1])
             handle.write("\n")
         except:
-            print("Error when writing results to file '%s'" % snakemake_parameters["generators_summary_file"])
+            print("Error when writing to file '%s'" % snakemake_parameters["summary_file"])
             handle.close()
             sys.exit(-1)   # exit unsuccessfully
 
 
-        # get generator plot
-        plot = network.generators_t.p.plot()
-
-
         # save generators plot to file (in png format)
+        plot = network.generators_t.p.plot()
         figure = plot.get_figure()
-        figure.savefig(snakemake_parameters["generators_plot_file"][i])
+        figure.savefig(snakemake_parameters["generators_file"][i])
+
+
+        # save stores plot to file (in png format)
+        plot = network.stores_t.p.plot()
+        figure = plot.get_figure()
+        figure.savefig(snakemake_parameters["stores_file"][i])
 
 
     # close file handle
     handle.close()
+
+
+    # save vehicle plot to file (in png format)
+    figure, axes = plt.subplots()
+    axes.set_title("Vehicle Usage")
+    axes.set_xlabel("Year")
+    axes.set_ylabel("Unit")
+    axes.set_xlim(2015, 2055)
+    axes.plot(snakemake_parameters["planning_horizons"], ICEV_units, "o-", label = "ICEV")
+    axes.plot(snakemake_parameters["planning_horizons"], BEV_units, "x-", label = "BEV")
+    axes.legend()
+    figure.savefig(snakemake_parameters["vehicle_file"])
 
 
     sys.exit(0)   # exit successfully

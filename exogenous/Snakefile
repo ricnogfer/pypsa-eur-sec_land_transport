@@ -23,8 +23,10 @@ rule all:
         availability_profile_file = expand(RESOURCE_PATH + "/avail_profile_s_{clusters}.csv", **config["scenario"]),
         dsm_profile_file = expand(RESOURCE_PATH + "/dsm_profile_s_{clusters}.csv", **config["scenario"])
     output:
-        generators_summary_file = RESULT_PATH + "/generators_summary.txt",
-        generators_plot_file = expand(RESULT_PATH + "/generators_{planning_horizons}.png", **config["scenario"])
+        summary_file = RESULT_PATH + "/summary.txt",
+        generators_file = expand(RESULT_PATH + "/generators_{planning_horizons}.png", **config["scenario"]),
+        stores_file = expand(RESULT_PATH + "/stores_{planning_horizons}.png", **config["scenario"]),
+        vehicle_file = RESULT_PATH + "/vehicle.png"
     script:
         "model.py"
 
