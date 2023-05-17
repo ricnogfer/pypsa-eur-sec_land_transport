@@ -180,6 +180,7 @@ def get_snakemake_parameters():
         parameters["BEV_V2G"] = snakemake.config["sector"]["v2g"]
         parameters["ICEV_consumption_per_unit"] = snakemake.config["sector"]["icev_consumption_per_unit"]
         parameters["BEV_consumption_per_unit"] = snakemake.config["sector"]["bev_consumption_per_unit"]
+        parameters["technology_costs"] = snakemake.config["costs"]
         parameters["summary_file"] = snakemake.output["summary_file"]
         parameters["generators_file"] = tuple(snakemake.output["generators_file"])
         parameters["stores_file"] = tuple(snakemake.output["stores_file"])
@@ -208,6 +209,7 @@ def get_snakemake_parameters():
         parameters["BEV_V2G"] = True
         parameters["ICEV_consumption_per_unit"] = 0.05   # arbitrary value
         parameters["BEV_consumption_per_unit"] = 0.01   # arbitrary value
+        parameters["technology_costs"] = {"year": 2030, "version": "v0.5.0", "rooftop_share": 0.14, "fill_values": {"FOM": 0, "VOM": 0, "efficiency": 1, "fuel": 0, "investment": 0, "lifetime": 25, "CO2 intensity": 0, "discount rate": 0.07}, "marginal_cost": {"solar": 0.01, "onwind": 0.015, "offwind": 0.015, "hydro": 0.0, "H2": 0.0, "electrolysis": 0.0, "fuel cell": 0.0, "battery": 0.0, "battery inverter": 0.0}, "emission_prices": {"co2": 0.0}}
         parameters["summary_file"] = "%s/summary.txt" % result_path
         parameters["generators_file"] = ("%s/generators_2025.png" % result_path, )
         parameters["stores_file"] = ("%s/stores_2025.png" % result_path, )
@@ -235,48 +237,23 @@ def get_model_parameters(snakemake_parameters, index):
         Contains the parameters that the model (i.e. PyPSA network) will be based upon.
     """
 
-
-
-    def calculate_annuity(period, discount_rate):
-        """
-        Parameters
-        ----------
-        period : a Python integer (int)
-            Contains the fixed length of time to receive payments from an investment.
-        discount_rate : a Python float (float)
-            Contains the assumed rate of return that is used to determine the present value of future payments.
-
-        Returns
-        -------
-        None.
-        """
-
-        if discount_rate > 0:
-            return discount_rate / (1.0 - 1.0 / (1.0 + discount_rate) ** period)
-
-        return 1 / period
-
-
-
     parameters = dict()
 
 
-    # read technology costs (CSV) file
-    technology_costs = pandas.read_csv(snakemake_parameters["technology_costs_file"][index], index_col = "technology")
+    # read technology costs (CSV) file and prepare (i.e. process) these for proper consumption afterwards
+    technology_costs = prepare_costs(snakemake_parameters["technology_costs_file"][index], snakemake_parameters["technology_costs"], 1)
 
 
     # get oil generator costs
-    oil = technology_costs.loc["oil"].set_index("parameter")
+    oil = technology_costs.loc["oil"]
     parameters["oil_capital_cost"] = 0   # set to 0 since oil is imported to Europe (i.e. no relevant capital cost associated with oil generators)
-    parameters["oil_marginal_cost"] = oil.at["fuel", "value"]
+    parameters["oil_marginal_cost"] = oil.at["fuel"]
 
 
     # get solar generator costs
-    solar = technology_costs.loc["solar"].set_index("parameter")
-    solar_investment = solar.at["investment", "value"] * 1000.0   # in EUR/MW
-    solar_annuity = calculate_annuity(solar.at["lifetime", "value"], 0.05) + solar.at["FOM", "value"] / 100.0   # in percentage
-    parameters["solar_capital_cost"] = solar_investment * solar_annuity
-    parameters["solar_marginal_cost"] = solar.at["VOM", "value"]
+    solar = technology_costs.loc["solar"]
+    parameters["solar_capital_cost"] = solar.at["investment"]
+    parameters["solar_marginal_cost"] = solar.at["VOM"]
 
 
     # read solar profile CSV file and get profile for chosen country
@@ -431,6 +408,61 @@ def solve_model(snakemake_parameters):
 
 
     return 0   # return successfully
+
+
+
+def prepare_costs(cost_file, config, nyears):
+    """
+    Parameters
+    ----------
+    cost_file : a Python string (str)
+        Lorem Ipsum.
+    config : a Python dictionary (dict())
+        Lorem Ipsum.
+    nyears : a Python integer (int)
+        Lorem Ipsum.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+    """
+
+
+    def annuity(n,r):
+        """ Calculate the annuity factor
+        for an asset with lifetime n years and
+        discount rate of f, e.g. annuity(20,0.05)*20 = 1.6 """
+
+        if r > 0:
+            return r/(1. - 1./(1.+r)**n)
+        else:
+            return 1/n
+
+
+    def annuity_factor(v):
+
+        return annuity(v["lifetime"], v["discount rate"]) + v["FOM"] / 100.0
+
+
+    # set all asset costs and other parameters
+    costs = pandas.read_csv(cost_file, index_col = [0, 1]).sort_index()
+
+
+    # correct units to MW and EUR
+    costs.loc[costs.unit.str.contains("/kW"), "value"] *= 1e3
+
+    # min_count=1 is important to generate NaNs which are then filled by fillna
+    costs = (costs.loc[:, "value"].unstack(level = 1).groupby("technology").sum(min_count = 1))
+
+
+    costs = costs.fillna(config["fill_values"])
+
+
+    costs["fixed"] = [annuity_factor(v) * v["investment"] * nyears for i, v in costs.iterrows()]
+
+
+    return costs
 
 
 
