@@ -326,33 +326,22 @@ def get_model_parameters(snakemake_parameters, index):
 
 
 
-# run code (if present module is not imported by another one)
-if __name__ == "__main__":
+def solve_model(snakemake_parameters):
+    """
+    Parameters
+    ----------
+    snakemake_parameters : a Python dictionary (dict())
+        Contains the Snakemake parameters needed to create the model (i.e. PyPSA network) parameters.
 
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+    """
 
     # declare lists to hold ICE/BE-based vehicle units throughout planning horizons
     ICEV_units = list()
     BEV_units = list()
-
-
-    # get Snakemake parameters
-    snakemake_parameters = get_snakemake_parameters()
-
-
-    # check that Snakemake parameters "planning_horizons", "ICEV_shares" and "BEV_shares" are properly specified
-    if not snakemake_parameters["planning_horizons"] or not snakemake_parameters["ICEV_shares"] or not snakemake_parameters["BEV_shares"]:
-        print("The Snakemake parameters 'planning_horizons', 'ICEV_shares' and/or 'BEV_shares' is/are not specified!")
-        sys.exit(-1)   # exit unsuccessfully
-    if len(snakemake_parameters["planning_horizons"]) != len(snakemake_parameters["ICEV_shares"]) != len(snakemake_parameters["BEV_shares"]):
-        print("The number of Snakemake parameters in 'planning_horizons', 'ICEV_shares' and 'BEV_shares' do not match!")
-        sys.exit(-1)   # exit unsuccessfully
-
-
-    # check that ICE/BE-based vehicle shares are properly specified
-    for i in range(len(snakemake_parameters["ICEV_shares"])):
-        if snakemake_parameters["ICEV_shares"][i] + snakemake_parameters["BEV_shares"][i] != 1:
-            print("The sum of ICE vehicle share with BE vehicle share is not equal to 1!")
-            sys.exit(-1)   # exit unsuccessfully
 
 
     # open file to write results
@@ -360,7 +349,7 @@ if __name__ == "__main__":
         handle = open(snakemake_parameters["summary_file"], "w")
     except:
         print("Error when creating/opening file '%s'" % snakemake_parameters["summary_file"])
-        sys.exit(-1)   # exit unsuccessfully
+        return -1   # return unsuccessfully
 
 
     # loop through planning horizons
@@ -378,7 +367,8 @@ if __name__ == "__main__":
         status = network.lopf(pyomo = False, solver_name = "gurobi")
         if status[0] != "ok":
             print("The solver did not reach a solution (infeasible or unbounded)!")
-            sys.exit(-1)   # exit unsuccessfully
+            handle.close()
+            return -1   # return unsuccessfully
 
 
         # calculate ICE/BE-based vehicle units of the planning horizon
@@ -409,7 +399,7 @@ if __name__ == "__main__":
         except:
             print("Error when writing to file '%s'" % snakemake_parameters["summary_file"])
             handle.close()
-            sys.exit(-1)   # exit unsuccessfully
+            return -1   # return unsuccessfully
 
 
         # save generators plot to file (in png format)
@@ -440,5 +430,38 @@ if __name__ == "__main__":
     figure.savefig(snakemake_parameters["vehicle_file"])
 
 
-    sys.exit(0)   # exit successfully
+    return 0   # return successfully
+
+
+
+# run code (if present module is not imported by another one)
+if __name__ == "__main__":
+
+
+    # get Snakemake parameters
+    snakemake_parameters = get_snakemake_parameters()
+
+
+    # check that Snakemake parameters "planning_horizons", "ICEV_shares" and "BEV_shares" are properly specified
+    if not snakemake_parameters["planning_horizons"] or not snakemake_parameters["ICEV_shares"] or not snakemake_parameters["BEV_shares"]:
+        print("The Snakemake parameters 'planning_horizons', 'ICEV_shares' and/or 'BEV_shares' is/are not specified!")
+        sys.exit(-1)   # exit unsuccessfully
+    if len(snakemake_parameters["planning_horizons"]) != len(snakemake_parameters["ICEV_shares"]) != len(snakemake_parameters["BEV_shares"]):
+        print("The number of Snakemake parameters in 'planning_horizons', 'ICEV_shares' and 'BEV_shares' do not match!")
+        sys.exit(-1)   # exit unsuccessfully
+
+
+    # check that ICE/BE-based vehicle shares are properly specified
+    for i in range(len(snakemake_parameters["ICEV_shares"])):
+        if snakemake_parameters["ICEV_shares"][i] + snakemake_parameters["BEV_shares"][i] != 1:
+            print("The sum of ICE vehicle share with BE vehicle share is not equal to 1!")
+            sys.exit(-1)   # exit unsuccessfully
+
+
+    # solve model
+    status = solve_model(snakemake_parameters)
+
+
+    # exit with returned status value
+    sys.exit(status)
 
