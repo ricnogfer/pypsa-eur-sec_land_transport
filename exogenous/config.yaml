@@ -42,10 +42,9 @@ sector:
   bev_availability: 0.5  #How many cars do smart charging
   bev_energy: 0.05  #average battery size in MWh
   bev_charge_efficiency: 0.9  #BEV (dis-)charging efficiency
-  bev_plug_to_wheel_efficiency: 0.2 #kWh/km from EPA https://www.fueleconomy.gov/feg/ for Tesla Model S
   bev_charge_rate: 0.011 #3-phase charger with 11 kW
-  bev_avail_max: 0.95
-  bev_avail_mean: 0.8
   v2g: true #allows feed-in to grid from EV battery
   transport_internal_combustion_efficiency: 0.3
+  icev_consumption_per_unit: 0.05   # arbitrary value
+  bev_consumption_per_unit: 0.01   # arbitrary value
 
