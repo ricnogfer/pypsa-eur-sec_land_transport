@@ -54,6 +54,7 @@ rule retrieve_topo:
 # rule to generate the topographical representation of a network through PyPSATopo
 rule generate_topo:
     input:
+        "scripts/pypsatopo.py",
         network = expand("results/elec_s{simpl}_{planning_horizons}.nc", **config["scenario"])
     output:
         expand("results/elec_s{simpl}_{planning_horizons}.svg", **config["scenario"])
