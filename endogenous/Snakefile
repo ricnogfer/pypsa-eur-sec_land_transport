@@ -41,7 +41,7 @@ rule transport:
 
 
 # rule to download the tool PyPSATopo
-rule retrieve_topo:
+rule download_pypsatopo:
     input:
         HTTPRemoteProvider().remote("https://raw.githubusercontent.com/ricnogfer/pypsatopo/v0.5.0/pypsatopo.py", keep_local = True)
     output:
