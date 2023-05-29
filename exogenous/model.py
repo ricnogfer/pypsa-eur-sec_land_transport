@@ -184,6 +184,7 @@ def get_snakemake_parameters():
         parameters["summary_file"] = snakemake.output["summary_file"]
         parameters["generators_file"] = tuple(snakemake.output["generators_file"])
         parameters["stores_file"] = tuple(snakemake.output["stores_file"])
+        parameters["network_file"] = tuple(snakemake.output["network_file"])
         parameters["vehicle_file"] = snakemake.output["vehicle_file"]
         parameters["snapshots"] = pandas.date_range("%sT00:00Z" % snakemake.config["snapshots"]["start"], "%sT23:00Z" % snakemake.config["snapshots"]["end"], freq = "H")
     else:   # through terminal
@@ -213,6 +214,7 @@ def get_snakemake_parameters():
         parameters["summary_file"] = "%s/summary.txt" % result_path
         parameters["generators_file"] = ("%s/generators_2025.png" % result_path, )
         parameters["stores_file"] = ("%s/stores_2025.png" % result_path, )
+        parameters["network_file"] = ("%s/network_2025.nc" % result_path, )
         parameters["vehicle_file"] = "%s/vehicle.png" % result_path
         parameters["snapshots"] = pandas.date_range("2013-01-01T00:00Z", "2013-12-31T23:00Z", freq = "H")
 
@@ -368,9 +370,13 @@ def solve_model(snakemake_parameters):
         # solve network using Gurobi
         status = network.lopf(pyomo = False, solver_name = "gurobi")
         if status[0] != "ok":
-            print("The solver did not reach a solution (infeasible or unbounded)!")
+            print("The solver did not reach a solution (unfeasible or unbounded)!")
             handle.close()
             return -1   # return unsuccessfully
+
+
+        # save network
+        network.export_to_netcdf(snakemake_parameters["network_file"][i])
 
 
         # calculate ICE/BE-based vehicle units of the planning horizon
