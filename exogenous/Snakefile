@@ -3,6 +3,9 @@
 #
 
 
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+
+
 configfile: "config.yaml"
 
 
@@ -26,7 +29,31 @@ rule all:
         summary_file = RESULT_PATH + "/summary.txt",
         generators_file = expand(RESULT_PATH + "/generators_{planning_horizons}.png", **config["scenario"]),
         stores_file = expand(RESULT_PATH + "/stores_{planning_horizons}.png", **config["scenario"]),
+        network_file = expand(RESULT_PATH + "/network_{planning_horizons}.nc", **config["scenario"]),
         vehicle_file = RESULT_PATH + "/vehicle.png"
     script:
         "model.py"
+
+
+# rule to download the tool PyPSATopo
+rule download_pypsatopo:
+    input:
+        HTTPRemoteProvider().remote("https://raw.githubusercontent.com/ricnogfer/pypsatopo/v0.5.0/pypsatopo.py", keep_local = True)
+    output:
+        "pypsatopo.py"
+    run:
+        shell("mv {input} pypsatopo.py")
+        shell("chmod u+x pypsatopo.py")
+
+
+# rule to generate the topographical representation of a network through PyPSATopo
+rule generate_topo:
+    input:
+        "pypsatopo.py",
+        network = expand("results/network_{planning_horizons}.nc", **config["scenario"])
+    output:
+        expand("results/network_{planning_horizons}.svg", **config["scenario"])
+    shell:
+        "./pypsatopo.py -cc -nb -nq {input.network}"
+
 
