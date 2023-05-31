@@ -2,6 +2,7 @@ name: env_transport
 dependencies:
     - python=3.10
     - pypsa=0.22.1
+    - pandas>=1.5.3
     - snakemake-minimal
     - gurobi
 
