@@ -4,10 +4,10 @@ scenario:
   clusters: # number of nodes in Europe, any integer between 37 (1 node per country-zone) and several hundred
     - 45
   planning_horizons: # investment years for myopic and perfect; for overnight, year of cost assumptions can be different and is defined under 'costs'
-    - 2020
+    #- 2020
     #- 2025
     #- 2030
-    #- 2035
+    - 2035
     #- 2040
     #- 2045 
     #- 2050
@@ -25,6 +25,7 @@ co2_budget:
   2050: 0
   
 sector:  
+  increase_nb_cars: 1 #for each EV used another 2 EVs are implemented
   bev_charge_efficiency: 0.9  #BEV (dis-)charging efficiency
   bev_bat_to_wheel_efficiency: 0.91
   transport_internal_combustion_efficiency: 0.3    

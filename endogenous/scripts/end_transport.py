@@ -149,7 +149,8 @@ def transport(string, costs):
     CF_solar = df_solar[country][[hour.strftime("%Y-%m-%dT%H:%M:%SZ") for hour in network.snapshots]]
     
     
-    
+    elec_marg = pd.Series(100*(np.sin(np.linspace(-np.pi, np.pi, len(network.snapshots)) +np.pi/2))**2, index=network.snapshots)
+    elec_marg = pd.Series(100*(np.sin(2*np.pi*np.arange(0, 365*24)/(365*24) +np.pi/2))**2, index=network.snapshots)
     network.add("Generator",
                 "solar",
                 bus="electricity bus",
@@ -157,25 +158,39 @@ def transport(string, costs):
                 carrier="solar",
                 #p_nom_max=1000, #maximum capacity can be limited due to environmental constraints
                 capital_cost = 0, #1000*costs.at['solar', 'investment']*(annuity(costs.at['solar', 'lifetime'], 0.07)+costs.at['solar', 'FOM']/100),
-                marginal_cost = 10, #costs.at['solar', 'VOM'],
-                p_max_pu = 1, #CF_solar
+                marginal_cost = elec_marg, #10, #costs.at['solar', 'VOM'],
+                p_max_pu = 1., #CF_solar
                 )
     
     # Add EV links
     network.add("Bus", "EV battery bus")
+    dsm_profile = pd.read_csv(
+        snakemake.input.dsm_profile, index_col=0, parse_dates=True
+    )
+    dsm_profile.index = pd.to_datetime(dsm_profile.index, utc=True)
+
+    print(dsm_profile.index)
+    print(CF_solar.index)
+    dsm_profile = dsm_profile['DK1 0']
 
     if options["bev_dsm"]:
+
         network.add("Store", "EV battery storage",
                     bus="EV battery bus",
                     e_nom_extendable=True,
                     e_cyclic = True,
                     #capital_cost=costs.at['battery storage', 'investment'],
+                    e_min_pu = dsm_profile,
                     lifetime = costs.at['battery storage', 'lifetime'])
     
-    EV_c,L_norm_t = calculate_EV_timeseries(network,alpha=0.5)
+    EV_c,L_norm_t = calculate_EV_timeseries(network,alpha=1)
 
     network.add("Carrier",'EV battery')
     bev_charge_efficiency = options['bev_charge_efficiency']
+    print(min(EV_c))
+    for i in range(len(EV_c)): 
+        EV_c[i] = min(EV_c[i]*bev_charge_efficiency,1.0) 
+    print('min', min(EV_c))
     network.add("Link",
                 "EV battery charger",
                 bus0 = "electricity bus",
@@ -186,8 +201,6 @@ def transport(string, costs):
                 efficiency = bev_charge_efficiency, #costs.at['battery inverter', 'efficiency']**0.5,
                 #capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                 lifetime = costs.at['battery inverter', 'lifetime'])
-
-    
     
     # Only when v2g option is configured, add the v2g link
     if options["v2g"]:
@@ -198,8 +211,8 @@ def transport(string, costs):
                     carrier = 'EV battery discharger',
                     p_max_pu = EV_c,
                     p_nom_extendable = 'True',
-                    efficiency = costs.at['battery inverter', 'efficiency']**0.5,
-                    capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
+                    efficiency = bev_charge_efficiency, #costs.at['battery inverter', 'efficiency']**0.5,
+                    #capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
                     lifetime = costs.at['battery inverter', 'lifetime'])
 
     
@@ -232,10 +245,10 @@ def transport(string, costs):
         bus1="land transport bus",
         bus2 = "co2 atmosphere",                           
         carrier = "land transport demand",
-        capital_cost = snakemake.config['costs']['capital_cost']['ICE_vehicle']/options['energy_to_cars'] * ice_efficiency,
+        capital_cost = snakemake.config['costs']['capital_cost']['ICE_vehicle']/options['energy_to_cars'] * ice_efficiency, #TO DO: annualize
         efficiency = ice_efficiency,  
         efficiency2 = oil_co2*ice_efficiency,
-        p_min_pu = L_norm_t,
+        p_min_pu = L_norm_t, #*ice_efficiency,
         p_nom_extendable=True,
     )
     
@@ -247,12 +260,12 @@ def transport(string, costs):
         bus0="EV battery bus",                               
         bus1 = "land transport bus",
         carrier = "land transport demand",
-        capital_cost = snakemake.config['costs']['capital_cost']['E_vehicle']/options['energy_to_cars']*(ev_efficiency*bev_charge_efficiency),
+        capital_cost = snakemake.config['costs']['capital_cost']['E_vehicle']/options['energy_to_cars']*(ev_efficiency*bev_charge_efficiency)*options['increase_nb_cars'], #To DO: annualize
         efficiency = ev_efficiency,#bev_charge_efficiency,        
         p_nom_extendable=True,
-        #p_min_pu = L_norm_t,
+        p_min_pu = L_norm_t, #*ev_efficiency,
     )
-
+    print(1.2*max(network.loads_t.p_set['land transport']))
     # Add H2 cars 
     network.add(
         'Carrier',
@@ -284,12 +297,11 @@ def transport(string, costs):
         bus1 = "land transport bus",
         carrier = "land transport demand",
         efficiency= snakemake.config['sector']['H2_car_efficiency'],
-        capital_cost = snakemake.config['costs']['capital_cost']['H2_vehicle'],#bev_charge_efficiency,        
+        capital_cost = snakemake.config['costs']['capital_cost']['H2_vehicle'],#bev_charge_efficiency,      #TO DO: annualize  
         p_nom_extendable=True,
-        p_min_pu = L_norm_t,
+        p_min_pu = L_norm_t, #*snakemake.config['sector']['H2_car_efficiency'],
     )
-        
-    
+
     network.add(
         "GlobalConstraint",
         "co2_limit",
@@ -308,14 +320,14 @@ def add_v2g_constraint():
     network.model.add_constraints(lhs==rhs, name="constraint_v2g")
 
 def add_EV_storage_constraint():
-    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})/options['EV_charge_rate']
-    lhs2 = network.model.variables['Store-e_nom'].sel({'Store-ext':'EV battery storage'})/options['bev_energy']
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})/(options['EV_charge_rate']*options['increase_nb_cars'])
+    lhs2 = network.model.variables['Store-e_nom'].sel({'Store-ext':'EV battery storage'})/(options['bev_energy']*options['increase_nb_cars'])
     lhs = lhs1-lhs2
     rhs = 0
     network.model.add_constraints(lhs==rhs, name="constraint_EV_storage")
 
 def add_EV_number_constraint():
-    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})/options['EV_charge_rate']
+    lhs1 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})/(options['EV_charge_rate']*options['increase_nb_cars'])
     lhs2 = network.model.variables['Link-p_nom'].sel({'Link-ext':'EV'})/options['EV_consumption_1car']
     lhs = lhs1-lhs2
     rhs = 0
@@ -338,7 +350,7 @@ def extra_functionality(network, snapshots):
     
     
 def solve_network(network):
-
+    
     status, condition = network.optimize(
             solver_name='gurobi',
             extra_functionality=extra_functionality)
@@ -368,6 +380,9 @@ def solve_network(network):
         # print solar generator value
         print("Solar generator value: %f" % network.generators.p_nom_opt["solar"])
     
+        # print H2 generator value
+        print("H2 generator value: %f" % network.generators.p_nom_opt["H2"])    
+        
         network.generators_t.p.plot()
 
         plt.savefig(snakemake.output.results, dpi=1200, bbox_inches='tight')

@@ -46,23 +46,19 @@ def plot_EV_timeseries(n):
      fig,ax = plt.subplots(figsize=(10,5))
      EV_charging_norm.plot(ax=ax,label='charging') # plotting the fraction of cars being charged
      EV_discharging_norm.plot(ax=ax,label='driving') # plotting the fraction of cars being used 
-     ax.set_xlim([pd.to_datetime('5/5/2013', dayfirst=True),pd.to_datetime('14/5/2013', dayfirst=True)])
+     ax.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
      ax.set_ylabel('Fraction of EVs [-]')
      ax.legend()
 
      # make plot of state of charge of EV battery (full year)
-     fig1,ax1 = plt.subplots(2, figsize=(10,5))
-     EV_soc.plot(ax=ax1[0],label='SOC')
-     EV_charging_norm.plot(ax=ax1[1],label='charging') # plotting the fraction of cars being charged
-     EV_discharging_norm.plot(ax=ax1[1],label='driving') # plotting the fraction of cars being used 
-     for ax in ax1:
-          ax.legend()
+     fig1,ax1 = plt.subplots(figsize=(10,5))
+     EV_soc.plot(ax=ax1,label='SOC')
+     ax1.legend()
 
      # make plot of state of charge of EV battery (1 day)
      fig1_1,ax1_1 = plt.subplots(figsize=(10,5))
      EV_soc.plot(ax=ax1_1,label='SOC')
-     #ax1_1.plot(n.generators_t.marginal_cost['solar'], label='marginal cost solar')
-     ax1_1.set_xlim([pd.to_datetime('5/5/2013', dayfirst=True),pd.to_datetime('5/6/2013', dayfirst=True)])
+     ax1_1.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('5/6/2013')])
      ax1_1.legend()
 
      # make plot of how land transport demand is met (full year)
@@ -75,24 +71,84 @@ def plot_EV_timeseries(n):
      fig3,ax3 = plt.subplots(figsize=(10,5))
      t_df.plot.area(ax=ax3,stacked=True,alpha=0.5,lw=0)
      load_t.plot(ax=ax3,ls='--',lw=1, color='k',label='Load',zorder=10,alpha=0.5)
-     ax3.set_xlim([pd.to_datetime('5/5/2013', dayfirst=True),pd.to_datetime('14/5/2013', dayfirst=True)])
+     ax3.set_xlim([pd.to_datetime('5/5/2013'),pd.to_datetime('14/5/2013')])
      ax3.legend()
-     
-     #compare charging/discharging with constraints 
-     EV_L_norm = n.links_t.p_min_pu['EV']
-     max_charge = n.links_t.p_max_pu['EV battery charger']
-     fig4,ax4 = plt.subplots(2, sharex=True, sharey=True)
-     EV_charging_norm.plot(ax=ax4[0],label='charging') # plotting the fraction of cars being charged
-     EV_discharging_norm.plot(ax=ax4[1],label='driving') # plotting the fraction of cars being used 
-     EV_L_norm.plot(ax=ax4[1],ls='-.',alpha=0.7,label='minimum driving required') #plotting the minimum amount of normalized load that needs to be fulfiled 
-     max_charge.plot(ax=ax4[0], ls=':', alpha=0.7, label='maximum charging') #plot maximum of battery charge allowed
-     ax4[0].set_ylabel('Charging of EVs [-], p_max_pu of EV battery')
-     ax4[1].set_ylabel('Discharging of EVs [-], p_min_pu of EV')
-     for ax in ax4:
-        ax.set_xlim([pd.to_datetime('5/5/2013', dayfirst=True),pd.to_datetime('14/5/2013', dayfirst=True)])   
-        ax.legend()
 
-     return fig, fig1, fig1_1, fig2, fig3, fig4
+     return fig, fig1, fig1_1, fig2, fig3
+
+def plot_networks_together(networks, year):
+    list_gen_p = list()
+    list_gen_name = list()
+    list_year = list()
+    list_vehicle_name = list()
+    nb_vehicle = list()
+    count_year = -1
+    list_vehicles = []
+    # read data from all networks
+    for network in networks:
+        count_year+=1
+        # get all links directly connected to land transport
+        links = network.links.query('bus1 == "land transport bus"')
+        vehicles = list()
+        for i in links.index:            
+             if i.find('Vehicle'):
+                  ind = i.partition(' ')[0]
+             #calculate number of vehicles
+             vehicles.append(network.links.p_nom_opt[i]/snakemake.config["sector"][ind + '_consumption_1car'])
+             if i == 'EV':
+                print(vehicles)
+                vehicles[-1] = vehicles[-1]*snakemake.config["sector"]['increase_nb_cars']
+                print(vehicles)
+                print(network.links_t.p1.sum())
+             list_year.append(year[count_year])
+             list_vehicle_name.append(i)
+        veh = np.array(vehicles)
+        veh = veh/sum(veh)
+        vehicles = veh.tolist()
+        nb_vehicle.append(vehicles)
+    
+        for index in network.generators.index: 
+            #if list_gen_name.count(index) == 0:
+            list_gen_name.append(index)
+            #list_year.append(str(label[1]))
+            print(network.generators.p_nom_opt[index])
+            list_gen_p.append(network.generators_t.p[index].sum()/network.generators.p_nom_opt[index])
+            print(network.generators_t.p[index].sum())
+        # nb_EV = network.links.p_nom_opt['EV']/snakemake.config["sector"]['EV_consumption_1car']
+        # nb_ICE = network.links.p_nom_opt['ICE Vehicle']/snakemake.config["sector"]['ICE_consumption_1car']
+        # sum_cars = nb_EV + nb_ICE
+        # nb_EV = nb_EV*snakemake.config["sector"]['increase_nb_cars']/sum_cars
+        # nb_ICE = nb_ICE/sum_cars
+        # print(network.loads_t.p.sum())
+        # print(network.links_t.p1['EV'].sum())
+        # print(network.links_t.p1['ICE Vehicle'].sum())
+        # print('Ev, ICe', nb_EV, nb_ICE, nb_EV+nb_ICE)
+        #nb_vehicle[str(label[1])]=[nb_ICE, nb_EV]
+            
+    index = pd.MultiIndex.from_tuples(tuple(zip(list_year,list_gen_name)))   
+    generators = pd.DataFrame(list_gen_p,index=index)    
+    print(generators) 
+    generators = generators.unstack(level=-1)
+    #plt.bar(snakemake.config["scenario"]["planning_horizons"], generators)
+    for element in nb_vehicle:
+        for nb in element:
+            list_vehicles.append(nb)
+    nb_vehicle = list_vehicles
+    #nb_vehicle['index']=['EV', 'ICE']
+    #nb_vehicle = nb_vehicle.set_index('index')
+    index = pd.MultiIndex.from_tuples(tuple(zip(list_year,list_vehicle_name))) 
+    print(index, nb_vehicle)
+    nb_vehicles = pd.DataFrame(nb_vehicle, index=index)
+    nb_vehicles = nb_vehicles.unstack(level=-1)
+    print(nb_vehicles)
+    plt.figure()
+    nb_vehicles.plot.bar(stacked=True)
+    plt.savefig(snakemake.output.vehiclenb, dpi=1200, bbox_inches='tight')
+
+    plt.figure()
+    generators.plot.bar(stacked=True)
+    plt.savefig(snakemake.output.result, dpi=1200, bbox_inches='tight')
+
 
 
 def overrides():
@@ -145,29 +201,25 @@ def overrides():
 logger = logging.getLogger(__name__)
 
 
-# networks_dict = {
-#     (simpl, planning_horizon): "results/" +
-#     f"elec_s{simpl}_{planning_horizon}.nc"
-#     for simpl in snakemake.config["scenario"]["simpl"]
-#     for planning_horizon in snakemake.config["scenario"]["planning_horizons"]
-# }
-# dict_test = {key:value}
-networks_dict = {snakemake.input.network: snakemake.input.network,}
+networks_dict = {
+    (simpl, planning_horizon): "results/" +
+    f"elec_s{simpl}_{planning_horizon}.nc"
+    for simpl in snakemake.config["scenario"]["simpl"]
+    for planning_horizon in snakemake.config["scenario"]["planning_horizons"]
+}
+
 networks = list()
+year = list()
 for label, filename in networks_dict.items():
         logger.info(f"Make summary for scenario {label}, using {filename}")
 
         network = pypsa.Network(filename, override_component_attrs=overrides())
-        fig,fig1,fig2,fig3,fig4, fig5 = plot_EV_timeseries(network)
-        fig.savefig(snakemake.output.EV_balance, dpi=1200, bbox_inches='tight')
-        fig1.savefig(snakemake.output.EV_soc_1year, dpi=1200, bbox_inches='tight')
-        fig2.savefig(snakemake.output.EV_soc_1day, dpi=1200, bbox_inches='tight')
-        fig3.savefig(snakemake.output.transport_balance_1year, dpi=1200, bbox_inches='tight')
-        fig4.savefig(snakemake.output.transport_balance_period, dpi=1200, bbox_inches='tight')
-        fig5.savefig(snakemake.output.transport_balance_and_load, dpi=1200, bbox_inches='tight')
-
         print('network', filename, label)
         networks.append(network)
+        year.append(label[1])
+
+plot_networks_together(networks,year)
+
 
 
 

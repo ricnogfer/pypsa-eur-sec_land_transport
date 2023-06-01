@@ -14,24 +14,37 @@ rule all:
         expand("results/generators_profile{simpl}_{planning_horizons}.png", **config['scenario']),
 	expand('results/elec_s{simpl}_{planning_horizons}.nc',**config['scenario']),
 	"results/generators.png",
-	"results/vehiclenb.png"
+	"results/vehiclenb.png",
+	expand('results/EV_balance{simpl}_{planning_horizons}.png',**config['scenario']),
+	expand('results/EV_soc_1year{simpl}_{planning_horizons}.png',**config['scenario']),
+	expand('results/EV_soc_1day{simpl}_{planning_horizons}.png',**config['scenario']),
+	expand('results/transport_balance_1year{simpl}_{planning_horizons}.png',**config['scenario']),
+	expand('results/transport_balance_period{simpl}_{planning_horizons}.png',**config['scenario']),
+	expand('results/transport_balance_and_load{simpl}_{planning_horizons}.png',**config['scenario']),
 	
-
-rule plots:
-    input:
+rule plots_together:
+    input:    	
         expand('results/elec_s{simpl}_{planning_horizons}.nc',**config['scenario'])
     output:
         result = "results/generators.png",
         vehiclenb = "results/vehiclenb.png",
-        EV_balance = 'results/EV_balance.png',
-        EV_soc_1year = 'results/EV_soc_1year.png',
-        EV_soc_1day = 'results/EV_soc_1day.png',
-        transport_balance_1year = 'results/transport_balance_1year.png',
-        transport_balance_period = 'results/transport_balance_period.png',
+    script: "scripts/make_plots_summary.py" 
+        
+rule plots_individual:
+    input:
+        network = 'results/elec_s{simpl}_{planning_horizons}.nc',
+    output:
+        EV_balance = 'results/EV_balance{simpl}_{planning_horizons}.png',
+        EV_soc_1year = 'results/EV_soc_1year{simpl}_{planning_horizons}.png',
+        EV_soc_1day = 'results/EV_soc_1day{simpl}_{planning_horizons}.png',
+        transport_balance_1year = 'results/transport_balance_1year{simpl}_{planning_horizons}.png',
+        transport_balance_period = 'results/transport_balance_period{simpl}_{planning_horizons}.png',
+        transport_balance_and_load = 'results/transport_balance_and_load{simpl}_{planning_horizons}.png',
     script: "scripts/make_plots.py" 
 
 rule transport:
     input:
+    	dsm_profile = 'resources/dsm_profile_s_45.csv',
         transport_demand = expand("resources/transport_demand_s{simpl}_{clusters}.csv", **config['scenario']),
         co2_totals_name="resources/co2_totals.csv",
     output:
