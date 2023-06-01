@@ -148,7 +148,7 @@ def transport(string, costs):
     df_solar.index = pd.to_datetime(df_solar.index)
     CF_solar = df_solar[country][[hour.strftime("%Y-%m-%dT%H:%M:%SZ") for hour in network.snapshots]]
     
-    
+    #Marginal cost for solar with night peak and day low
     elec_marg = pd.Series(100*(np.sin(np.linspace(-np.pi, np.pi, len(network.snapshots)) +np.pi/2))**2, index=network.snapshots)
     elec_marg = pd.Series(100*(np.sin(2*np.pi*np.arange(0, 365*24)/(365*24) +np.pi/2))**2, index=network.snapshots)
     network.add("Generator",
@@ -164,6 +164,7 @@ def transport(string, costs):
     
     # Add EV links
     network.add("Bus", "EV battery bus")
+    # Add dsm_profile for minimal EV battery storage
     dsm_profile = pd.read_csv(
         snakemake.input.dsm_profile, index_col=0, parse_dates=True
     )
