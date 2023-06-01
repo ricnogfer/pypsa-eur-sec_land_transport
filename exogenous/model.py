@@ -252,7 +252,8 @@ def get_model_parameters(snakemake_parameters, index):
 
         Returns
         -------
-        None.
+        a Python integer (int)
+            Contains the annuity value.
         """
 
         if discount_rate > 0:
@@ -339,8 +340,8 @@ def solve_model(snakemake_parameters):
 
     Returns
     -------
-    TYPE
-        DESCRIPTION.
+    a Python integer (int)
+        Contains the status of solving the model (0 for successful; not 0 for unsuccessful).
     """
 
     # declare lists to hold ICE/BE-based vehicle units throughout planning horizons
@@ -375,7 +376,7 @@ def solve_model(snakemake_parameters):
             return -1   # return unsuccessfully
 
 
-        # save network
+        # save network (in netcdf format)
         network.export_to_netcdf(snakemake_parameters["network_file"][i])
 
 
