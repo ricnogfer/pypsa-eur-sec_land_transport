@@ -3,6 +3,9 @@
 #
 
 
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+
+
 configfile: "config.yaml"
 
 
@@ -16,15 +19,41 @@ wildcard_constraints:
 
 rule all:
     input:
-        technology_costs_file = RESOURCE_PATH + "/costs_2025.csv",
+        technology_costs_file = expand(RESOURCE_PATH + "/costs_{planning_horizons}.csv", **config["scenario"]),
         solar_profile_file = RESOURCE_PATH + "/solar_profile_1979_2017.csv",
         transport_data_file = expand(RESOURCE_PATH + "/transport_data_s_{clusters}.csv", **config["scenario"]),
         transport_demand_file = expand(RESOURCE_PATH + "/transport_demand_s_{clusters}.csv", **config["scenario"]),
         availability_profile_file = expand(RESOURCE_PATH + "/avail_profile_s_{clusters}.csv", **config["scenario"]),
         dsm_profile_file = expand(RESOURCE_PATH + "/dsm_profile_s_{clusters}.csv", **config["scenario"])
     output:
-        result_txt_file = RESULT_PATH + "/results.txt",
-        result_png_file = RESULT_PATH + "/results.png"
+        summary_file = RESULT_PATH + "/summary.txt",
+        generators_file = expand(RESULT_PATH + "/generators_{planning_horizons}.png", **config["scenario"]),
+        stores_file = expand(RESULT_PATH + "/stores_{planning_horizons}.png", **config["scenario"]),
+        network_file = expand(RESULT_PATH + "/network_{planning_horizons}.nc", **config["scenario"]),
+        vehicle_file = RESULT_PATH + "/vehicle.png"
     script:
         "model.py"
+
+
+# rule to download the tool PyPSATopo
+rule download_pypsatopo:
+    input:
+        HTTPRemoteProvider().remote("https://raw.githubusercontent.com/ricnogfer/pypsatopo/v0.5.0/pypsatopo.py", keep_local = True)
+    output:
+        "pypsatopo.py"
+    run:
+        shell("mv {input} pypsatopo.py")
+        shell("chmod u+x pypsatopo.py")
+
+
+# rule to generate the topographical representation of a network through PyPSATopo
+rule generate_topo:
+    input:
+        "pypsatopo.py",
+        network = expand("results/network_{planning_horizons}.nc", **config["scenario"])
+    output:
+        expand("results/network_{planning_horizons}.svg", **config["scenario"])
+    shell:
+        "./pypsatopo.py -cc -nb -nq {input.network}"
+
 
