@@ -105,7 +105,7 @@ def transport(string, costs):
     load_p = df_load['DK1 0']
     # data for load: resources/transport_demand_s{simpl}_{clusters}.csv 
     #print(network.loads_t.p_set)
-    print(network.carriers)
+    #print(network.carriers)
     
     network.add("Load",
                 "land transport",
@@ -157,9 +157,9 @@ def transport(string, costs):
                 p_nom_extendable=True,
                 carrier="solar",
                 #p_nom_max=1000, #maximum capacity can be limited due to environmental constraints
-                capital_cost = 0, #1000*costs.at['solar', 'investment']*(annuity(costs.at['solar', 'lifetime'], 0.07)+costs.at['solar', 'FOM']/100),
-                marginal_cost = elec_marg, #10, #costs.at['solar', 'VOM'],
-                p_max_pu = 1., #CF_solar
+                capital_cost = costs.at['solar', 'investment']*(annuity(costs.at['solar', 'lifetime'], 0.07)+costs.at['solar', 'FOM']/100),
+                marginal_cost = 0, #elec_marg, #10, #costs.at['solar', 'VOM'],
+                p_max_pu = CF_solar
                 )
     
     # Add EV links
@@ -169,9 +169,6 @@ def transport(string, costs):
         snakemake.input.dsm_profile, index_col=0, parse_dates=True
     )
     dsm_profile.index = pd.to_datetime(dsm_profile.index, utc=True)
-
-    print(dsm_profile.index)
-    print(CF_solar.index)
     dsm_profile = dsm_profile['DK1 0']
 
     if options["bev_dsm"]:
@@ -188,10 +185,10 @@ def transport(string, costs):
 
     network.add("Carrier",'EV battery')
     bev_charge_efficiency = options['bev_charge_efficiency']
-    print(min(EV_c))
+    
     for i in range(len(EV_c)): 
         EV_c[i] = min(EV_c[i]*bev_charge_efficiency,1.0) 
-    print('min', min(EV_c))
+    
     network.add("Link",
                 "EV battery charger",
                 bus0 = "electricity bus",
@@ -210,7 +207,7 @@ def transport(string, costs):
                     bus0 = "EV battery bus",
                     bus1 = 'electricity bus',
                     carrier = 'EV battery discharger',
-                    p_max_pu = EV_c,
+                    p_max_pu = 0, #EV_c,
                     p_nom_extendable = 'True',
                     efficiency = bev_charge_efficiency, #costs.at['battery inverter', 'efficiency']**0.5,
                     #capital_cost = costs.at['battery inverter', 'investment']*(annuity(costs.at['battery inverter', 'lifetime'], 0.07)+costs.at['battery inverter', 'FOM']/100),
@@ -238,7 +235,7 @@ def transport(string, costs):
                 carrier="co2")
 
     # Network add ICEV
-    ice_efficiency = options['transport_internal_combustion_efficiency']
+    ice_efficiency = costs.at['Liquid fuels ICE (passenger cars)', 'efficiency'] #coptions['transport_internal_combustion_efficiency']
     network.add(
         "Link",
         "ICE Vehicle",
@@ -246,27 +243,27 @@ def transport(string, costs):
         bus1="land transport bus",
         bus2 = "co2 atmosphere",                           
         carrier = "land transport demand",
-        capital_cost = snakemake.config['costs']['capital_cost']['ICE_vehicle']/options['energy_to_cars'] * ice_efficiency, #TO DO: annualize
-        efficiency = ice_efficiency,  
-        efficiency2 = oil_co2*ice_efficiency,
-        p_min_pu = L_norm_t, #*ice_efficiency,
+        capital_cost = (costs.at['Liquid fuels ICE (passenger cars)', 'investment']*(annuity(costs.at['Liquid fuels ICE (passenger cars)', 'lifetime'], 0.07)+costs.at['Liquid fuels ICE (passenger cars)', 'FOM']/100))/options['energy_to_cars'] * ice_efficiency, #snakemake.config['costs']['capital_cost']['ICE_vehicle']/options['energy_to_cars'] * ice_efficiency, #TO DO: annualize
+        efficiency = costs.at['Liquid fuels ICE (passenger cars)', 'efficiency'], #ice_efficiency,  
+        efficiency2 = oil_co2*costs.at['Liquid fuels ICE (passenger cars)', 'efficiency'],
+        p_min_pu = 0, #L_norm_t, #*ice_efficiency,
         p_nom_extendable=True,
     )
     
     # Add EV link
-    ev_efficiency = options['bev_bat_to_wheel_efficiency']
+    ev_efficiency = costs.at['Battery electric (passenger cars)', 'efficiency'] #options['bev_bat_to_wheel_efficiency']
     network.add(
         "Link",
         "EV",
         bus0="EV battery bus",                               
         bus1 = "land transport bus",
         carrier = "land transport demand",
-        capital_cost = snakemake.config['costs']['capital_cost']['E_vehicle']/options['energy_to_cars']*(ev_efficiency*bev_charge_efficiency)*options['increase_nb_cars'], #To DO: annualize
-        efficiency = ev_efficiency,#bev_charge_efficiency,        
+        capital_cost = (costs.at['Battery electric (passenger cars)', 'investment']*(annuity(costs.at['Battery electric (passenger cars)', 'lifetime'], 0.07)+costs.at['Battery electric (passenger cars)', 'FOM']/100))/options['energy_to_cars']*(ev_efficiency*bev_charge_efficiency)*options['increase_nb_cars'], #,#snakemake.config['costs']['capital_cost']['E_vehicle']
+        efficiency = costs.at['Battery electric (passenger cars)', 'efficiency'], # ev_efficiency,#bev_charge_efficiency,        
         p_nom_extendable=True,
-        p_min_pu = L_norm_t, #*ev_efficiency,
+        p_min_pu = 0, #L_norm_t, #*ev_efficiency,
     )
-    print(1.2*max(network.loads_t.p_set['land transport']))
+    
     # Add H2 cars 
     network.add(
         'Carrier',
@@ -277,7 +274,7 @@ def transport(string, costs):
         'Bus',
         'H2 bus',
     )
-    H2_vehicle_efficiency = options['H2_car_efficiency']
+    H2_vehicle_efficiency = costs.at['Hydrogen fuel cell (passenger cars)','efficiency'] #options['H2_car_efficiency']
     network.add("Generator",
             'H2',
             bus="H2 bus",
@@ -297,10 +294,10 @@ def transport(string, costs):
         bus0="H2 bus",                               
         bus1 = "land transport bus",
         carrier = "land transport demand",
-        efficiency= snakemake.config['sector']['H2_car_efficiency'],
-        capital_cost = snakemake.config['costs']['capital_cost']['H2_vehicle'],#bev_charge_efficiency,      #TO DO: annualize  
+        efficiency=  costs.at['Hydrogen fuel cell (passenger cars)','efficiency'],#snakemake.config['sector']['H2_car_efficiency'],
+        capital_cost = (costs.at['Hydrogen fuel cell (passenger cars)', 'investment']*(annuity(costs.at['Hydrogen fuel cell (passenger cars)', 'lifetime'], 0.07)+costs.at['Hydrogen fuel cell (passenger cars)', 'FOM']/100)),#snakemake.config['costs']['capital_cost']['H2_vehicle'],#bev_charge_efficiency,      #TO DO: annualize  
         p_nom_extendable=True,
-        p_min_pu = L_norm_t, #*snakemake.config['sector']['H2_car_efficiency'],
+        p_min_pu = 0, #L_norm_t, #*snakemake.config['sector']['H2_car_efficiency'],
     )
 
     network.add(
@@ -337,8 +334,8 @@ def add_EV_number_constraint():
 def extra_functionality(network, snapshots):
     
     #m = network.optimize.create_model() #for debugging
-    print(network.model.variables['Link-p_nom'])
-    print(network.model.variables['Link-p_nom']['EV battery charger'])
+    #print(network.model.variables['Link-p_nom'])
+    #print(network.model.variables['Link-p_nom']['EV battery charger'])
     network.model.variables['Link-p_nom'].sel({'Link-ext':'EV battery charger'})
     #network.model.variables['Link-p_nom'].sel('battery_charger') #use dictionary for network.model.variables().sel(key:value)
     if options["bev_dsm"]:
@@ -371,7 +368,7 @@ def solve_network(network):
     if(status == 'ok'):
         print(network)
         print(network.links)
-        print(network.generators_t.p.sum())
+        
         # print objective value
         print("Objective value: %f" % network.objective)
     
@@ -384,8 +381,9 @@ def solve_network(network):
         # print H2 generator value
         print("H2 generator value: %f" % network.generators.p_nom_opt["H2"])    
         
+        plt.figure()
         network.generators_t.p.plot()
-
+        plt.ylabel('p [MW]')
         plt.savefig(snakemake.output.results, dpi=1200, bbox_inches='tight')
         #plt.show()
 

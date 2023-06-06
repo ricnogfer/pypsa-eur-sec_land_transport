@@ -21,6 +21,8 @@ rule all:
 	expand('results/transport_balance_1year{simpl}_{planning_horizons}.png',**config['scenario']),
 	expand('results/transport_balance_period{simpl}_{planning_horizons}.png',**config['scenario']),
 	expand('results/transport_balance_and_load{simpl}_{planning_horizons}.png',**config['scenario']),
+	"scripts/pypsatopo.py",
+	expand("results/elec_s{simpl}_{planning_horizons}.svg", **config["scenario"]),
 	
 rule plots_together:
     input:    	
