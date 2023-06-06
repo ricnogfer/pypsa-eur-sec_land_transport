@@ -79,7 +79,10 @@ def plot_EV_timeseries(n):
      ax3.legend()
      
      #compare charging/discharging with constraints 
-     EV_L_norm = n.links_t.p_min_pu['EV']
+     if n.links_t.p_min_pu.empty:
+          EV_L_norm = pd.Series(np.full(len(network.snapshots), n.links.p_min_pu['EV']), index=network.snapshots)
+     else:
+          EV_L_norm = n.links_t.p_min_pu['EV']
      max_charge = n.links_t.p_max_pu['EV battery charger']
      fig4,ax4 = plt.subplots(2, sharex=True, sharey=True)
      EV_charging_norm.plot(ax=ax4[0],label='charging') # plotting the fraction of cars being charged

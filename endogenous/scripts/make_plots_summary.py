@@ -99,7 +99,7 @@ def plot_networks_together(networks, year):
                 print(vehicles)
                 vehicles[-1] = vehicles[-1]*snakemake.config["sector"]['increase_nb_cars']
                 print(vehicles)
-                print(network.links_t.p1.sum())
+                print(-network.links_t.p1.sum())
              list_year.append(year[count_year])
              list_vehicle_name.append(i)
         veh = np.array(vehicles)
@@ -112,7 +112,8 @@ def plot_networks_together(networks, year):
             list_gen_name.append(index)
             #list_year.append(str(label[1]))
             print(network.generators.p_nom_opt[index])
-            list_gen_p.append(network.generators_t.p[index].sum()/network.generators.p_nom_opt[index])
+            #list_gen_p.append(network.generators_t.p[index].sum()/network.generators.p_nom_opt[index])
+            list_gen_p.append(network.generators.p_nom_opt[index])
             print(network.generators_t.p[index].sum())
         # nb_EV = network.links.p_nom_opt['EV']/snakemake.config["sector"]['EV_consumption_1car']
         # nb_ICE = network.links.p_nom_opt['ICE Vehicle']/snakemake.config["sector"]['ICE_consumption_1car']
@@ -125,9 +126,11 @@ def plot_networks_together(networks, year):
         # print('Ev, ICe', nb_EV, nb_ICE, nb_EV+nb_ICE)
         #nb_vehicle[str(label[1])]=[nb_ICE, nb_EV]
             
-    index = pd.MultiIndex.from_tuples(tuple(zip(list_year,list_gen_name)))   
-    generators = pd.DataFrame(list_gen_p,index=index)    
-    print(generators) 
+    index = pd.MultiIndex.from_tuples(tuple(zip(list_year,list_gen_name)))  
+    index = index.set_names(['year','generator'])    
+    
+    generators = pd.DataFrame(list_gen_p,index=index) 
+    generators.columns = ['Name']
     generators = generators.unstack(level=-1)
     #plt.bar(snakemake.config["scenario"]["planning_horizons"], generators)
     for element in nb_vehicle:
@@ -137,16 +140,21 @@ def plot_networks_together(networks, year):
     #nb_vehicle['index']=['EV', 'ICE']
     #nb_vehicle = nb_vehicle.set_index('index')
     index = pd.MultiIndex.from_tuples(tuple(zip(list_year,list_vehicle_name))) 
-    print(index, nb_vehicle)
+    index = index.set_names(['year','vehicle type']) 
+
     nb_vehicles = pd.DataFrame(nb_vehicle, index=index)
     nb_vehicles = nb_vehicles.unstack(level=-1)
-    print(nb_vehicles)
-    plt.figure()
-    nb_vehicles.plot.bar(stacked=True)
-    plt.savefig(snakemake.output.vehiclenb, dpi=1200, bbox_inches='tight')
 
     plt.figure()
-    generators.plot.bar(stacked=True)
+    nb_vehicles[0].plot.bar(stacked=True)
+    plt.ylabel('Ratio of car types [-]')
+    plt.savefig(snakemake.output.vehiclenb, dpi=1200, bbox_inches='tight')
+    
+
+    
+    plt.figure()
+    generators['Name'].plot.bar(stacked=True)
+    plt.ylabel('p_nom_opt [MW]')
     plt.savefig(snakemake.output.result, dpi=1200, bbox_inches='tight')
 
 
